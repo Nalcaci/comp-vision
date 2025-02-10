@@ -7,7 +7,7 @@ criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 25, 0.001)
 
 # prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(6,5,0)
 objp = np.zeros((6*9,3), np.float32)
-objp[:,:2] = np.mgrid[0:6,0:9].T.reshape(-1,2)
+objp[:,:2] = np.mgrid[0:6,0:9].T.reshape(-1,2) * 2.5 #the squares are 2.5 cm
 
 # Arrays to store object points and image points from all the images.
 objpoints = [] # 3d point in real world space
