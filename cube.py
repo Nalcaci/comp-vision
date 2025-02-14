@@ -17,7 +17,7 @@ def main():
     # Replace these with your real camera calibration results.
     # For this example, we assume a focal length of 1000 and the principal point at the image center.
     # (Note: tvec units will match the units of square_size.)
-    test_img = cv.imread("images/c14.png")
+    test_img = cv.imread("images/c13.png")
     if test_img is None:
         print("Error: Could not load test image.")
         return
@@ -176,6 +176,7 @@ def main():
     # Use the projected points for the top face (vertices 4-7).
     top_face_pts = cube_img[4:8].reshape((-1, 1, 2))
     cv.fillConvexPoly(test_img, top_face_pts, bgr_color)
+    cv.drawChessboardCorners(test_img, (9,6), corners, ret)
     
     # -----------------------------
     # DISPLAY THE AUGMENTED IMAGE
