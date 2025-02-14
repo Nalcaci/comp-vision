@@ -90,53 +90,48 @@ for fname in images:
             half = cube_size / 2.0
             
             # Define bottom face vertices (relative to board_center)
-            # bottom_face = np.float32([
-            #     [-half, -half, 0],
-            #     [ half, -half, 0],
-            #     [ half,  half, 0],
-            #     [-half,  half, 0]
-            # ])
+            # Instead of computing board_center and a centered square,
+            # Define cube size to cover 2 squares by 2 squares on the chessboard.
+            cube_size = 2 * square_size  # each side of the cube's base spans 2 squares.
+            half = cube_size / 2.0
 
-            # Define the indices for the four outer corners:
-            top_left     = objp[4]
-            top_right    = objp[2]         # (9-1) because indexing starts at 0
-            bottom_right = objp[-2]
-            bottom_left  = objp[-4]        # Last point of the second-to-last row
+            # Define the bottom face of the cube relative to its center.
+            # (This gives you a square centered at (0,0,0) with side length cube_size.)
+            # Define the cube to cover a 2x2 block of chessboard squares.
+            # Here we choose the block with chessboard object coordinates:
+            # bottom-left (3,2), bottom-right (5,2), top-right (5,4), and top-left (3,4)
+            bottom_face = np.float32([
+                [3 * square_size, 2 * square_size, 0],
+                [5 * square_size, 2 * square_size, 0],
+                [5 * square_size, 4 * square_size, 0],
+                [3 * square_size, 4 * square_size, 0]
+            ])
 
-            # Create the bottom face using these corners.
-            bottom_face = np.float32([top_left, top_right, bottom_right, bottom_left])
-
-            # Define top face vertices (shifted in z by -cube_size)
-            # top_face = bottom_face.copy()
-            # top_face[:, 2] = -cube_size
-
-            cube_size = square_size * 2  # or any desired cube size
+            # For a cube, set its height equal to 2 squares.
+            cube_height = 2 * square_size
+            # Define the top face by shifting the bottom face upward (using -cube_height)
             top_face = bottom_face.copy()
-            top_face[:, 2] = -cube_size  # shift upward (negative z direction)
-            
-            # Translate cube vertices so that the bottom face is centered at board_center.
-            bottom_face_world = board_center + bottom_face
-            top_face_world = board_center + top_face
-            # Combine all eight vertices (order: bottom face then top face)
-            # cube_world = np.concatenate((bottom_face_world, top_face_world), axis=0)
-            # cube_img, _ = cv.projectPoints(cube_world, rvec, tvec, cameraMatrix, distCoeffs)
-            # cube_img = cube_img.reshape(-1, 2).astype(int)
+            top_face[:, 2] = -cube_height  # negative z to "raise" the cube
+
+            # Combine the bottom and top face vertices.
             cube_world = np.concatenate((bottom_face, top_face), axis=0)
+
+            # Project the cube's 3D points to 2D image points.
             cube_img, _ = cv.projectPoints(cube_world, rvec, tvec, cameraMatrix, distCoeffs)
             cube_img = cube_img.reshape(-1, 2).astype(int)
-            
+
             # Draw the cube edges:
-            # Bottom face edges
+            # Draw bottom face edges.
             for i in range(4):
                 pt1 = tuple(cube_img[i])
                 pt2 = tuple(cube_img[(i+1) % 4])
                 cv.line(img, pt1, pt2, (255, 0, 255), 2)
-            # Top face edges
+            # Draw top face edges.
             for i in range(4, 8):
                 pt1 = tuple(cube_img[i])
                 pt2 = tuple(cube_img[4 + (i+1-4) % 4])
                 cv.line(img, pt1, pt2, (255, 0, 255), 2)
-            # Vertical edges
+            # Draw vertical edges.
             for i in range(4):
                 pt_bottom = tuple(cube_img[i])
                 pt_top = tuple(cube_img[i+4])
@@ -145,6 +140,10 @@ for fname in images:
             # -----------------------------
             # COMPUTE THE TOP FACE COLOR
             # -----------------------------
+            
+            bottom_face_world = board_center + bottom_face
+            top_face_world = board_center + top_face
+
             # (1) Distance → Value (V in HSV)
             # Compute the center of the cube’s top face in world coordinates.
             top_face_center = np.mean(top_face_world, axis=0).reshape(1, 3)
