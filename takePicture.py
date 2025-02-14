@@ -20,7 +20,7 @@ while True:
     key = cv2.waitKey(1) & 0xFF  # Wait for key press
     if key == ord('y'):  # Save image when 'y' is pressed
         image_count += 1
-        filename = f'images/c{image_count}.png'
+        filename = f'images for run 1/c{image_count}.png'
         cv2.imwrite(filename, frame)
         print(f"Image saved as {filename}")
     elif key == ord('q'):  # Quit when 'q' is pressed
