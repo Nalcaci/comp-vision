@@ -2,33 +2,52 @@ import numpy as np
 import cv2 as cv
 import glob
 
-pattern_size = (9, 6)  # (columns, rows)
-square_size = 2.5  #the squares are 2.5 cm
+# Chessboard parameters
+chessboard_size = (9, 6)  # Internal corners
+square_size = 2.5  # Square size in cm
 
-# termination criteria
+# Termination criteria for corner refinement
 criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 25, 0.001)
 
-# # prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(6,5,0)
-objp = np.zeros((pattern_size[0]*pattern_size[1], 3), np.float32)
-# The grid: x varies along the number of columns, y varies along the number of rows.
-objp[:, :2] = np.mgrid[0:pattern_size[0], 0:pattern_size[1]].T.reshape(-1, 2) * square_size
+# Prepare 3D object points
+objp = np.zeros((np.prod(chessboard_size), 3), np.float32)
+objp[:, :2] = np.mgrid[0:chessboard_size[0], 0:chessboard_size[1]].T.reshape(-1, 2) * square_size
 
-# Arrays to store object points and image points from all the images.
-objpoints = [] # 3d point in real world space
-imgpoints = [] # 2d points in image plane.
+# Storage for object and image points
+objpoints = []  # 3D points
+imgpoints = []  # 2D points
 
-distCoeffs = np.zeros((5, 1))  # assuming no lens distortion
+# Load images
+images = glob.glob("images for run 3/*.png")
 
-# Mouse callback function to manually select corners
-def select_corners(event, x, y, flags, param):
-    if event == cv.EVENT_LBUTTONDOWN:
-        if len(param['corners']) < 4:
-            param['corners'].append((x, y))
-            print(f"Corner {len(param['corners'])} selected at ({x}, {y})")
-            if len(param['corners']) == 4:
-                print("All 4 corners selected.")
+if not images:
+    print("No images found! Check the folder path.")
+    exit()
 
-images = glob.glob("images/*.png")
+# Get image size
+img = cv.imread(images[0])
+gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+image_size = gray.shape[::-1]  # (width, height)
+
+# **Step 1: First Pass - Initial Calibration**
+for fname in images:
+    img = cv.imread(fname)
+    gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+
+    ret, corners = cv.findChessboardCorners(gray, chessboard_size, None)
+
+    if ret:
+        objpoints.append(objp)
+        corners2 = cv.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
+        imgpoints.append(corners2)
+
+        cv.drawChessboardCorners(img, chessboard_size, corners2, ret)
+        cv.imshow("Initial Detection", img)
+        cv.waitKey(200)
+
+cv.destroyAllWindows()
+
+ret, mtx, dist, rvecs, tvecs = cv.calibrateCamera(objpoints, imgpoints, image_size, None, None)
 
 for fname in images:
     img = cv.imread(fname)
@@ -45,11 +64,9 @@ for fname in images:
         # imgpoints.append(corners2)
 
         img_height, img_width = img.shape[:2]
-        cameraMatrix = np.array([[1000,    0, img_width/2],
-                                [   0, 1000, img_height/2],
-                                [   0,    0,         1]], dtype=np.float64)
+        cameraMatrix = mtx
 
-        ret2, rvec, tvec = cv.solvePnP(objp, corners2, cameraMatrix, distCoeffs)
+        ret2, rvec, tvec = cv.solvePnP(objp, corners2, cameraMatrix, dist)
         if ret2 == True:
             board_center = np.mean(objp, axis=0).reshape(1, 3)
 
@@ -64,7 +81,7 @@ for fname in images:
             ])
             # Place the axes at the board center.
             axes_world = board_center + axes_points
-            axes_img, _ = cv.projectPoints(axes_world, rvec, tvec, cameraMatrix, distCoeffs)
+            axes_img, _ = cv.projectPoints(axes_world, rvec, tvec, cameraMatrix, dist)
             axes_img = axes_img.reshape(-1, 2).astype(int)
             
             # Draw the axes lines on the image.
@@ -107,7 +124,7 @@ for fname in images:
             cube_world = np.concatenate((bottom_face, top_face), axis=0)
 
             # Project the cube's 3D points to 2D image points.
-            cube_img, _ = cv.projectPoints(cube_world, rvec, tvec, cameraMatrix, distCoeffs)
+            cube_img, _ = cv.projectPoints(cube_world, rvec, tvec, cameraMatrix, dist)
             cube_img = cube_img.reshape(-1, 2).astype(int)
 
             # Draw the cube edges:
@@ -162,7 +179,7 @@ for fname in images:
             
             # (3) Horizontal position → Hue (H in HSV)
             # Project the board center (world coordinate) to image coordinates.
-            board_center_img, _ = cv.projectPoints(board_center, rvec, tvec, cameraMatrix, distCoeffs)
+            board_center_img, _ = cv.projectPoints(board_center, rvec, tvec, cameraMatrix, dist)
             board_center_img = board_center_img.reshape(-1, 2)
             x_center = board_center_img[0, 0]
             hue = int((x_center / img_width) * 180)  # OpenCV uses H in [0, 180]
@@ -183,44 +200,5 @@ for fname in images:
             cv.imshow("Computer Vision - Assignment 1", img)
             cv.waitKey(500)
             cv.destroyAllWindows()
-    else:
-        print("Could not find chessboard in " + fname)
-        # print("Please manually select the 4 corners of the chessboard.")
-
-        # # Initialize list to store manually selected corners
-        # manual_corners = []
-
-        # # Create a named window and set the mouse callback
-        # cv.namedWindow('img')
-        # cv.setMouseCallback('img', select_corners, {'corners': manual_corners})
-
-        # while len(manual_corners) < 4:
-        #     cv.imshow('img', img)
-        #     cv.waitKey(1)
-
-        # # Once 4 corners are selected, compute the homography and find the inner corners
-        # manual_corners = np.array(manual_corners, dtype=np.float32)
-
-        # # Define the destination points for the homography (assuming the chessboard is 9x6)
-        # dst_points = np.array([[0, 0], [8, 0], [8, 5], [0, 5]], dtype=np.float32)
-
-        # # Compute the homography matrix
-        # H, _ = cv.findHomography(manual_corners, dst_points)
-
-        # # Use the homography to find the inner corners
-        # h, w = gray.shape
-        # inner_corners = cv.perspectiveTransform(np.array([[[0, 0], [8, 0], [8, 5], [0, 5]]], dtype=np.float32), H)
-        # inner_corners = inner_corners.reshape(-1, 2)
-
-        # # Append the object points and image points
-        # objpoints.append(objp)
-        # imgpoints.append(inner_corners)
-
-        # # Draw the manually selected corners
-        # for corner in manual_corners:
-        #     cv.circle(img, tuple(corner.astype(int)), 5, (0, 255, 0), -1)
-
-        cv.imshow('img', img)
-        cv.waitKey(500)
 
 cv.destroyAllWindows()
