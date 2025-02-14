@@ -8,9 +8,9 @@ square_size = 2.5
 # termination criteria
 criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 25, 0.001)
 
-# prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(6,5,0)
-objp = np.zeros((6*9,3), np.float32)
-objp[:,:2] = np.mgrid[0:6,0:9].T.reshape(-1,2) * 2.5 #the squares are 2.5 cm
+# # prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(6,5,0)
+# objp = np.zeros((6*9,3), np.float32)
+# objp[:,:2] = np.mgrid[0:6,0:9].T.reshape(-1,2) * 2.5 #the squares are 2.5 cm
 
 # Arrays to store object points and image points from all the images.
 objpoints = [] # 3d point in real world space
@@ -38,10 +38,10 @@ for fname in images:
 
     # If found, add object points, image points (after refining them)
     if ret == True:
-        objpoints.append(objp)
+        # objpoints.append(objp)
 
         corners2 = cv.cornerSubPix(gray,corners, (11,11), (-1,-1), criteria)
-        imgpoints.append(corners2)
+        # imgpoints.append(corners2)
 
         # # Draw and display the corners
         # cv.drawChessboardCorners(img, (9,6), corners2, ret)
@@ -52,12 +52,16 @@ for fname in images:
         cameraMatrix = np.array([[1000,    0, img_width/2],
                                 [   0, 1000, img_height/2],
                                 [   0,    0,         1]], dtype=np.float64)
+        
+        objp = np.zeros((pattern_size[0]*pattern_size[1], 3), np.float32)
+        # The grid: x varies along the number of columns, y varies along the number of rows.
+        objp[:, :2] = np.mgrid[0:pattern_size[0], 0:pattern_size[1]].T.reshape(-1, 2) * square_size
 
         ret2, rvec, tvec = cv.solvePnP(objp, corners2, cameraMatrix, distCoeffs)
         if ret2 == True:
             board_center = np.mean(objp, axis=0).reshape(1, 3)
 
-            axis_length = square_size * 3  # e.g., length equal to three squares
+            axis_length = square_size * 2  # e.g., length equal to three squares
             # Axes: X (red), Y (green) and Z (blue).
             # (Here, the Z axis is drawn in the negative direction so that it “rises” from the board.)
             axes_points = np.float32([
@@ -86,21 +90,38 @@ for fname in images:
             half = cube_size / 2.0
             
             # Define bottom face vertices (relative to board_center)
-            bottom_face = np.float32([
-                [-half, -half, 0],
-                [ half, -half, 0],
-                [ half,  half, 0],
-                [-half,  half, 0]
-            ])
+            # bottom_face = np.float32([
+            #     [-half, -half, 0],
+            #     [ half, -half, 0],
+            #     [ half,  half, 0],
+            #     [-half,  half, 0]
+            # ])
+
+            # Define the indices for the four outer corners:
+            top_left     = objp[4]
+            top_right    = objp[2]         # (9-1) because indexing starts at 0
+            bottom_right = objp[-2]
+            bottom_left  = objp[-4]        # Last point of the second-to-last row
+
+            # Create the bottom face using these corners.
+            bottom_face = np.float32([top_left, top_right, bottom_right, bottom_left])
+
             # Define top face vertices (shifted in z by -cube_size)
+            # top_face = bottom_face.copy()
+            # top_face[:, 2] = -cube_size
+
+            cube_size = square_size * 2  # or any desired cube size
             top_face = bottom_face.copy()
-            top_face[:, 2] = -cube_size
+            top_face[:, 2] = -cube_size  # shift upward (negative z direction)
             
             # Translate cube vertices so that the bottom face is centered at board_center.
             bottom_face_world = board_center + bottom_face
             top_face_world = board_center + top_face
             # Combine all eight vertices (order: bottom face then top face)
-            cube_world = np.concatenate((bottom_face_world, top_face_world), axis=0)
+            # cube_world = np.concatenate((bottom_face_world, top_face_world), axis=0)
+            # cube_img, _ = cv.projectPoints(cube_world, rvec, tvec, cameraMatrix, distCoeffs)
+            # cube_img = cube_img.reshape(-1, 2).astype(int)
+            cube_world = np.concatenate((bottom_face, top_face), axis=0)
             cube_img, _ = cv.projectPoints(cube_world, rvec, tvec, cameraMatrix, distCoeffs)
             cube_img = cube_img.reshape(-1, 2).astype(int)
             
@@ -121,7 +142,7 @@ for fname in images:
                 pt_top = tuple(cube_img[i+4])
                 cv.line(img, pt_bottom, pt_top, (255, 0, 255), 2)
 
-                    # -----------------------------
+            # -----------------------------
             # COMPUTE THE TOP FACE COLOR
             # -----------------------------
             # (1) Distance → Value (V in HSV)
@@ -167,8 +188,8 @@ for fname in images:
             # -----------------------------
             # Use the projected points for the top face (vertices 4-7).
             top_face_pts = cube_img[4:8].reshape((-1, 1, 2))
-            cv.fillConvexPoly(img, top_face_pts, bgr_color)
             cv.drawChessboardCorners(img, (9,6), corners2, ret)
+            cv.fillConvexPoly(img, top_face_pts, bgr_color)
             
             # -----------------------------
             # DISPLAY THE AUGMENTED IMAGE
