@@ -3,14 +3,15 @@ import cv2 as cv
 import glob
 
 pattern_size = (9, 6)  # (columns, rows)
-square_size = 2.5
+square_size = 2.5  #the squares are 2.5 cm
 
 # termination criteria
 criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 25, 0.001)
 
 # # prepare object points, like (0,0,0), (1,0,0), (2,0,0) ....,(6,5,0)
-# objp = np.zeros((6*9,3), np.float32)
-# objp[:,:2] = np.mgrid[0:6,0:9].T.reshape(-1,2) * 2.5 #the squares are 2.5 cm
+objp = np.zeros((pattern_size[0]*pattern_size[1], 3), np.float32)
+# The grid: x varies along the number of columns, y varies along the number of rows.
+objp[:, :2] = np.mgrid[0:pattern_size[0], 0:pattern_size[1]].T.reshape(-1, 2) * square_size
 
 # Arrays to store object points and image points from all the images.
 objpoints = [] # 3d point in real world space
@@ -43,19 +44,10 @@ for fname in images:
         corners2 = cv.cornerSubPix(gray,corners, (11,11), (-1,-1), criteria)
         # imgpoints.append(corners2)
 
-        # # Draw and display the corners
-        # cv.drawChessboardCorners(img, (9,6), corners2, ret)
-        # cv.imshow('img', img)
-        # cv.waitKey(500)
-
         img_height, img_width = img.shape[:2]
         cameraMatrix = np.array([[1000,    0, img_width/2],
                                 [   0, 1000, img_height/2],
                                 [   0,    0,         1]], dtype=np.float64)
-        
-        objp = np.zeros((pattern_size[0]*pattern_size[1], 3), np.float32)
-        # The grid: x varies along the number of columns, y varies along the number of rows.
-        objp[:, :2] = np.mgrid[0:pattern_size[0], 0:pattern_size[1]].T.reshape(-1, 2) * square_size
 
         ret2, rvec, tvec = cv.solvePnP(objp, corners2, cameraMatrix, distCoeffs)
         if ret2 == True:
@@ -94,9 +86,7 @@ for fname in images:
             # Define cube size to cover 2 squares by 2 squares on the chessboard.
             cube_size = 2 * square_size  # each side of the cube's base spans 2 squares.
             half = cube_size / 2.0
-
-            # Define the bottom face of the cube relative to its center.
-            # (This gives you a square centered at (0,0,0) with side length cube_size.)
+            
             # Define the cube to cover a 2x2 block of chessboard squares.
             # Here we choose the block with chessboard object coordinates:
             # bottom-left (3,2), bottom-right (5,2), top-right (5,4), and top-left (3,4)
@@ -190,11 +180,8 @@ for fname in images:
             cv.drawChessboardCorners(img, (9,6), corners2, ret)
             cv.fillConvexPoly(img, top_face_pts, bgr_color)
             
-            # -----------------------------
-            # DISPLAY THE AUGMENTED IMAGE
-            # -----------------------------
-            cv.imshow("Augmented Reality", img)
-            cv.waitKey(0)
+            cv.imshow("Computer Vision - Assignment 1", img)
+            cv.waitKey(500)
             cv.destroyAllWindows()
     else:
         print("Could not find chessboard in " + fname)
