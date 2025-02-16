@@ -110,7 +110,7 @@ def select_corners(event, x, y, flags, param):
 
 # **Step 2: Creating a Cube on the chessboard**
 def CreateCubeOnTheChessboard(images: list[str]):
-    # Get image size & Get Camera Matrix and Distortion
+    # Get image size, Camera Matrix & Distortion
     img = cv.imread(images[0])
     gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
     image_size = gray.shape[::-1]  # (width, height)
@@ -132,7 +132,26 @@ def CreateCubeOnTheChessboard(images: list[str]):
 
             isSolvePnPWorks, rvec, tvec = cv.solvePnP(objp, cornersForSolvePnP, cameraMatrix, camereaDistortion)
             if isSolvePnPWorks == True:
-                # bottom-left (3,2), bottom-right (5,2), top-right (5,4), and top-left (3,4)
+                board_center = np.mean(objp, axis=0).reshape(1, 3)
+                axis_length = square_size * 2  # e.g., length equal to three squares
+                axes_points = np.float32([
+                    [0, 0, 0],
+                    [axis_length, 0, 0],
+                    [0, axis_length, 0],
+                    [0, 0, -axis_length]
+                ])
+                # Place the axes at the board center.
+                axes_world = board_center + axes_points
+                axes_img, _ = cv.projectPoints(axes_world, rvec, tvec, cameraMatrix, dist)
+                axes_img = axes_img.reshape(-1, 2).astype(int)
+
+                # Draw the axes lines on the image.
+                origin_pt = tuple(axes_img[0])
+                cv.line(img, origin_pt, tuple(axes_img[1]), (0, 0, 255), 3)# X-axis
+                cv.line(img, origin_pt, tuple(axes_img[2]), (0, 255, 0), 3)#Y-axis
+                cv.line(img, origin_pt, tuple(axes_img[3]), (255, 0, 0), 3)#Z-axis
+
+                # Box Position = bottom-left (3,2), bottom-right (5,2), top-right (5,4), and top-left (3,4)
                 bottom_face = np.float32([
                     [3 * square_size, 2 * square_size, 0],
                     [5 * square_size, 2 * square_size, 0],
