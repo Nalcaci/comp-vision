@@ -17,8 +17,17 @@ objp[:, :2] = np.mgrid[0:chessboard_size[0], 0:chessboard_size[1]].T.reshape(-1,
 objpoints = []  # 3D points
 imgpoints = []  # 2D points
 
-# Load images
-images = glob.glob("images for run 3/*.png")
+# Function to manually select the corners
+def select_corners(event, x, y, flags, param):
+    if event == cv.EVENT_LBUTTONDOWN:
+        if len(param['corners']) < 4:
+            param['corners'].append((x, y))
+            print(f"Corner {len(param['corners'])} selected at ({x}, {y})")
+            if len(param['corners']) == 4:
+                print("All 4 corners selected.")
+
+# Load images, change the number of the folder for the run
+images = glob.glob("images for run 1/*.png")
 
 if not images:
     print("No images found! Check the folder path.")
@@ -29,7 +38,7 @@ img = cv.imread(images[0])
 gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 image_size = gray.shape[::-1]  # (width, height)
 
-# **Step 1: First Pass - Initial Calibration**
+#Calibration
 for fname in images:
     img = cv.imread(fname)
     gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
@@ -41,13 +50,56 @@ for fname in images:
         corners2 = cv.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
         imgpoints.append(corners2)
 
-        cv.drawChessboardCorners(img, chessboard_size, corners2, ret)
-        cv.imshow("Initial Detection", img)
-        cv.waitKey(200)
+    else:
+        print(f"Chessboard not found in {fname}, please select the 4 corners of the chessboard starting from top left and ending at bottom left.")
+
+        # Manually assign the corners
+        manual_corners = []
+         
+        cv.namedWindow('img')
+        cv.setMouseCallback('img', select_corners, {'corners': manual_corners})
+
+        while len(manual_corners) < 4:
+            cv.imshow('img', img)
+            cv.waitKey(1)
+        
+        # Convert the selected corners to NumPy array
+        manual_corners = np.array(manual_corners, dtype=np.float32)
+
+        # Define object points (real-world coordinates in cm)
+        dst_points = np.array([
+            [0, 0],  
+            [chessboard_size[1] - 1, 0],  
+            [chessboard_size[1] - 1, chessboard_size[0] - 1],  
+            [0, chessboard_size[0] - 1]  
+        ], dtype=np.float32) * square_size
+        H, _ = cv.findHomography(manual_corners, dst_points)
+
+        # Generate grid of expected inner corners
+        x_grid, y_grid = np.meshgrid(range(chessboard_size[1]), range(chessboard_size[0]))
+        grid_points = np.vstack([x_grid.ravel(), y_grid.ravel()]).T.astype(np.float32) * square_size
+
+        # Transform these points to image space
+        projected_corners = cv.perspectiveTransform(grid_points.reshape(1, -1, 2), np.linalg.inv(H))
+        projected_corners = projected_corners.reshape(-1, 1, 2)
+
+        # Store points
+        objpoints.append(objp)
+        imgpoints.append(projected_corners)
+
+        # Draw selected and calculated points
+        for point in projected_corners:
+            cv.circle(img, tuple(point.ravel().astype(int)), 5, (0, 255, 0), -1)
+
+        cv.imshow("Detected Corners", img)
+        cv.waitKey(500)
 
 cv.destroyAllWindows()
 
 ret, mtx, dist, rvecs, tvecs = cv.calibrateCamera(objpoints, imgpoints, image_size, None, None)
+print(f" Final Reprojection Error: {ret}")
+print(f" Camera Matrix:\n{mtx}")
+print(f" Distortion Coefficients:\n{dist}")
 
 for fname in images:
     img = cv.imread(fname)
