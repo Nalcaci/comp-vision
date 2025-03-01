@@ -21,7 +21,7 @@ imgpoints = []  # 2D points
 
 # Main function controls the flow
 def Main():
-    images = GetImages("Assignment 2/data/cam1/intrinsics_screenshots/*.png")
+    images = GetImages("Assignment 2/data/cam4/intrinsics_screenshots/*.png")
     if not images:
         print("No images found! Check the folder path.")
         return
@@ -118,7 +118,7 @@ def InitialCalibration(images: list[str], showResults: bool):
     print(f" Distortion Coefficients:\n{dist}")
 
     # Save to XML
-    file_path = "Assignment 2/data/cam1/intrinsics.xml"
+    file_path = "Assignment 2/data/cam4/intrinsics.xml"
     fs = cv.FileStorage(file_path, cv.FILE_STORAGE_WRITE)
 
     # Write Camera Matrix
