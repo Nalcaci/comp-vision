@@ -21,7 +21,7 @@ imgpoints = []  # 2D points
 
 # Main function controls the flow
 def Main():
-    images = GetImages("Assignment 2/data/cam1/intrinsic_screenshots/*.png")
+    images = GetImages("Assignment 2/data/cam1/intrinsics_screenshots/*.png")
     if not images:
         print("No images found! Check the folder path.")
         return
@@ -113,8 +113,22 @@ def InitialCalibration(images: list[str], showResults: bool):
     gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
     image_size = gray.shape[::-1]  # (width, height)
     ret, mtx, dist, rvecs, tvecs = cv.calibrateCamera(objpoints, imgpoints, image_size, None, None)
-    cameraMatrix = mtx
-    camereaDistortion = dist
     print(f" Final Reprojection Error: {ret}")
-    print(f" Camera Matrix:\n{cameraMatrix}")
-    print(f" Distortion Coefficients:\n{camereaDistortion}")
+    print(f" Camera Matrix:\n{mtx}")
+    print(f" Distortion Coefficients:\n{dist}")
+
+    # Save to XML
+    file_path = "Assignment 2/data/cam1/intrinsics.xml"
+    fs = cv.FileStorage(file_path, cv.FILE_STORAGE_WRITE)
+
+    # Write Camera Matrix
+    fs.write("CameraMatrix", mtx)
+
+    # Write Distortion Coefficients
+    fs.write("DistortionCoeffs", dist)
+
+    fs.release()  # Close file
+    print(f"Camera intrinsics saved to {file_path}")
+
+if __name__ == "__main__":
+    Main()
