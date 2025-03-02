@@ -241,7 +241,7 @@ def main():
     
     # === Task 2: Background Subtraction ===
     # Process each camera (assume 4 cameras) for background modeling and foreground extraction.
-    cam_ids = ['cam1', 'cam2', 'cam3', 'cam4']
+    cam_ids = ['cam4']
     base_path = os.path.join("Assignment 2", "data")
     calibration_params = {}     # To store (mtx, dist, rvec, tvec) per camera
     foreground_masks = {}         # To store one foreground mask per camera (for a chosen frame)

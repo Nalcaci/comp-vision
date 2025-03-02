@@ -21,7 +21,7 @@ imgpoints = []  # 2D points
 
 # Main function controls the flow
 def Main():
-    images = GetImages("Assignment 2/data/cam4/intrinsics_screenshots/*.png")
+    images = GetImages("Assignment 2/data/cam3/intrinsics_screenshots/*.png")
     if not images:
         print("No images found! Check the folder path.")
         return

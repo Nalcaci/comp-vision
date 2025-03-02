@@ -52,7 +52,7 @@ def draw_axes_on_chessboard(image, mtx, dist, rvec, tvec, square_size):
     return image
 
 def Main():
-    images = GetImages("Assignment 2/data/cam4/intrinsics_screenshots/*.png")
+    images = GetImages("Assignment 2/data/cam1/intrinsics_screenshots/*.png")
     if not images:
         print("No images found! Check the folder path.")
         return
@@ -120,6 +120,7 @@ def InitialCalibration(images: list, showResults: bool):
 
             if showResults:
                 cv.drawChessboardCorners(img, chessboard_size, corners, ret)
+                img_with_axes = draw_axes_on_chessboard(img.copy(), mtx, dist, rvec, tvec, square_size)
                 cv.imshow("img", img)
                 cv.waitKey(200)
         else:
