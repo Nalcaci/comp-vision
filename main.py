@@ -31,11 +31,11 @@ def Main():
 def GetImages(FilePath: str):
     return glob.glob(FilePath)
 
-# **Step 1: First Pass - Initial Calibration**
+# Calibration
 def InitialCalibration(images: list[str], showResults: bool):
     img = cv.imread(images[0])
     gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-    image_size = gray.shape[::-1]  # (width, height)
+    image_size = gray.shape[::-1]
 
     #Calibration
     for fname in images:
@@ -69,7 +69,7 @@ def InitialCalibration(images: list[str], showResults: bool):
             # Convert the selected corners to NumPy array
             manual_corners = np.array(manual_corners, dtype=np.float32)
 
-            # Define object points (real-world coordinates in cm)
+            # Define object points (real world coordinates in cm)
             dst_points = np.array([
                 [0, 0],  
                 [chessboard_size[1] - 1, 0],  
@@ -108,18 +108,19 @@ def select_corners(event, x, y, flags, param):
             if len(param['corners']) == 4:
                 print("All 4 corners selected.")
 
-# **Step 2: Creating a Cube on the chessboard**
+# Create a Cube on the chessboard
 def CreateCubeOnTheChessboard(images: list[str]):
     # Get image size, Camera Matrix & Distortion
     img = cv.imread(images[0])
     gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-    image_size = gray.shape[::-1]  # (width, height)
+    image_size = gray.shape[::-1]
     ret, mtx, dist, rvecs, tvecs = cv.calibrateCamera(objpoints, imgpoints, image_size, None, None)
     cameraMatrix = mtx
     camereaDistortion = dist
     print(f" Final Reprojection Error: {ret}")
     print(f" Camera Matrix:\n{cameraMatrix}")
     print(f" Distortion Coefficients:\n{camereaDistortion}")
+    print(f" size:\n{image_size}")
 
     for fname in images:
         img = cv.imread(fname)
@@ -133,7 +134,7 @@ def CreateCubeOnTheChessboard(images: list[str]):
             isSolvePnPWorks, rvec, tvec = cv.solvePnP(objp, cornersForSolvePnP, cameraMatrix, camereaDistortion)
             if isSolvePnPWorks == True:
                 board_center = np.mean(objp, axis=0).reshape(1, 3)
-                axis_length = square_size * 2  # e.g., length equal to three squares
+                axis_length = square_size * 2  #length equal to 2 squares
                 axes_points = np.float32([
                     [0, 0, 0],
                     [axis_length, 0, 0],
@@ -184,11 +185,48 @@ def CreateCubeOnTheChessboard(images: list[str]):
                     cv.line(img, pt_bottom, pt_top, (255, 0, 255), 2)
                 
                 top_face_pts = cube_img[4:8].reshape((-1, 1, 2))
-                red_color = (0, 0, 255)
 
-                # Draw the corners and cube on the chessboard
-                cv.drawChessboardCorners(img, chessboard_size, corners, ret)
-                cv.fillConvexPoly(img, top_face_pts, red_color)
+
+                # Colouring of the top polygon
+                bottom_face_world = board_center + bottom_face
+                top_face_world = board_center + top_face
+                # Compute the center of the cube’s top face in world coordinates.
+                top_face_center = np.mean(top_face_world, axis=0).reshape(1, 3)
+                # Transform the top face center to camera coordinates.
+                R_mat, _ = cv.Rodrigues(rvec)
+                top_face_cam = R_mat.dot(top_face_center.T) + tvec
+                distance = np.linalg.norm(top_face_cam)
+
+                max_distance = 400.0
+                v_value = 255 * (1 - min(distance, max_distance) / max_distance)
+                v_value = int(np.clip(v_value, 0, 255))
+                
+                # Compute the chessboard’s normal in world coordinates ([0, 0, 1]) transformed into camera coordinates.
+                board_normal_world = np.array([0, 0, 1], dtype=np.float32).reshape(3, 1)
+                board_normal_cam = R_mat.dot(board_normal_world).flatten()
+                # The camera’s viewing direction is along the Z axis [0, 0, 1].
+                # Compute the angle (in degrees) between board_normal_cam and [0, 0, 1].
+                cos_angle = board_normal_cam[2] / np.linalg.norm(board_normal_cam)
+                tilt_angle = np.degrees(np.arccos(np.clip(cos_angle, -1.0, 1.0)))
+
+                max_tilt = 45.0
+                s_value = 255 * (1 - min(tilt_angle, max_tilt) / max_tilt)
+                s_value = int(np.clip(s_value, 0, 255))
+                
+                # Project the board center (world coordinate) to image coordinates.
+                board_center_img, _ = cv.projectPoints(board_center, rvec, tvec, cameraMatrix, dist)
+                board_center_img = board_center_img.reshape(-1, 2)
+                x_center = board_center_img[0, 0]
+                hue = int((x_center / image_size[1]) * 180)  # OpenCV uses H in [0, 180]
+                
+                # Combine HSV components and convert to BGR for drawing.
+                hsv_color = np.uint8([[[hue, s_value, v_value]]])
+                bgr_color = cv.cvtColor(hsv_color, cv.COLOR_HSV2BGR)[0][0]
+                bgr_color = tuple(int(c) for c in bgr_color)
+
+                # Use the projected points for the top face (vertices 4-7).
+                top_face_pts = cube_img[4:8].reshape((-1, 1, 2))
+                cv.fillConvexPoly(img, top_face_pts, bgr_color)
                 
                 cv.imshow("Computer Vision - Assignment 1", img)
                 cv.waitKey(0)
