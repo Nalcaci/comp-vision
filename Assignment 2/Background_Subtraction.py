@@ -2,7 +2,7 @@ import cv2 as cv
 import numpy as np
 import glob
 
-def get_background_frame(video_path, method="median", sample_rate=10):
+def get_background_frame(video_path, sample_rate=10):
     cap = cv.VideoCapture(video_path)
     frames = []
 
@@ -16,16 +16,12 @@ def get_background_frame(video_path, method="median", sample_rate=10):
         frames.append(cv.cvtColor(frame, cv.COLOR_BGR2GRAY))
 
     cap.release()
-
-    if method == "median":
-        background_frame = np.median(frames, axis=0).astype(dtype=np.uint8)
-    else:
-        background_frame = np.mean(frames, axis=0).astype(dtype=np.uint8)
+    background_frame = np.median(frames, axis=0).astype(dtype=np.uint8)
 
     return background_frame
 
 def background_subtraction(background_video, people_video, output_video):
-    background = get_background_frame(background_video, method="median")
+    background = get_background_frame(background_video)
     
     cap = cv.VideoCapture(people_video)
     fourcc = cv.VideoWriter_fourcc(*'XVID')
