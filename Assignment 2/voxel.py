@@ -3,45 +3,6 @@ import cv2 as cv
 import glob
 import os
 
-# Task 2: Background Subtraction
-def build_background_model(video_path, num_frames=30):
-    cap = cv.VideoCapture(video_path)
-    if not cap.isOpened():
-        raise ValueError(f"Video file {video_path} cannot be opened.")
-    frames = []
-    count = 0
-    while count < num_frames:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        frame_hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
-        frame_hsv = cv.GaussianBlur(frame_hsv, (5, 5), 0)
-        frames.append(frame_hsv.astype(np.float32))
-        count += 1
-    cap.release()
-    if len(frames) == 0:
-        raise ValueError("No frames read from background video.")
-    background_model = np.mean(frames, axis=0).astype(np.uint8)
-    return background_model
-
-def get_foreground_mask(frame, background_model, thresholds=(15, 30, 30)):
-    frame_hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
-    frame_hsv = cv.GaussianBlur(frame_hsv, (5, 5), 0)
-    background_blurred = cv.GaussianBlur(background_model, (5, 5), 0)
-    diff = cv.absdiff(frame_hsv, background_blurred)
-    
-    _, mask_h = cv.threshold(diff[:, :, 0], thresholds[0], 255, cv.THRESH_BINARY)
-    _, mask_s = cv.threshold(diff[:, :, 1], thresholds[1], 255, cv.THRESH_BINARY)
-    _, mask_v = cv.threshold(diff[:, :, 2], thresholds[2], 255, cv.THRESH_BINARY)
-    
-    mask = cv.bitwise_and(mask_h, mask_s)
-    mask = cv.bitwise_and(mask, mask_v)
-    
-    kernel = np.ones((3, 3), np.uint8)
-    mask = cv.morphologyEx(mask, cv.MORPH_OPEN, kernel)
-    mask = cv.morphologyEx(mask, cv.MORPH_CLOSE, kernel)
-    return mask
-
 # Task 3: Voxel Reconstruction
 def voxel_reconstruction(foreground_masks, calibration_params, voxel_step=8, grid_dims=(128, 64, 128)):
     voxels_on = []

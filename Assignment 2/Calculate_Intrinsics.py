@@ -20,7 +20,6 @@ imgpoints = []  # 2D points
 
 cam_file = "cam4"
 
-# Main function controls the flow
 def Main():
     images = GetImages("Assignment 2/data/" + cam_file + "/intrinsics_screenshots/*.png")
     if not images:
@@ -33,7 +32,6 @@ def Main():
 def GetImages(FilePath: str):
     return glob.glob(FilePath)
 
-# Function to manually select the corners
 def select_corners(event, x, y, flags, param):
     if event == cv.EVENT_LBUTTONDOWN:
         if len(param['corners']) < 4:
@@ -47,7 +45,6 @@ def InitialCalibration(images: list[str], showResults: bool):
     gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
     image_size = gray.shape[::-1]  # (width, height)
 
-    #Calibration
     for fname in images:
         img = cv.imread(fname)
         gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
@@ -66,7 +63,6 @@ def InitialCalibration(images: list[str], showResults: bool):
         else:
             print(f"Chessboard not found in {fname}, please select the 4 corners of the chessboard starting from top left and ending at bottom left.")
 
-            # Manually assign the corners
             manual_corners = []
             
             cv.namedWindow('img')
@@ -76,10 +72,8 @@ def InitialCalibration(images: list[str], showResults: bool):
                 cv.imshow('img', img)
                 cv.waitKey(1)
             
-            # Convert the selected corners to NumPy array
             manual_corners = np.array(manual_corners, dtype=np.float32)
 
-            # Define object points (real-world coordinates in cm)
             dst_points = np.array([
                 [0, 0],  
                 [chessboard_size[1] - 1, 0],  
@@ -88,19 +82,15 @@ def InitialCalibration(images: list[str], showResults: bool):
             ], dtype=np.float32) * square_size
             H, _ = cv.findHomography(manual_corners, dst_points)
 
-            # Generate grid of expected inner corners
             x_grid, y_grid = np.meshgrid(range(chessboard_size[1]), range(chessboard_size[0]))
             grid_points = np.vstack([x_grid.ravel(), y_grid.ravel()]).T.astype(np.float32) * square_size
 
-            # Transform these points to image space
             projected_corners = cv.perspectiveTransform(grid_points.reshape(1, -1, 2), np.linalg.inv(H))
             projected_corners = projected_corners.reshape(-1, 1, 2)
 
-            # Store points
             objpoints.append(objp)
             imgpoints.append(projected_corners)
 
-            # Draw selected and calculated points
             for point in projected_corners:
                 cv.circle(img, tuple(point.ravel().astype(int)), 5, (0, 255, 0), -1)
 
@@ -109,7 +99,6 @@ def InitialCalibration(images: list[str], showResults: bool):
 
     cv.destroyAllWindows()
 
-    # Get image size, Camera Matrix & Distortion
     img = cv.imread(images[0])
     gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
     image_size = gray.shape[::-1]  # (width, height)
@@ -122,19 +111,16 @@ def InitialCalibration(images: list[str], showResults: bool):
     file_path = "Assignment 2/data/" + cam_file + "/intrinsics.xml"
     fs = cv.FileStorage(file_path, cv.FILE_STORAGE_WRITE)
 
-    # Write Camera Matrix
     fs.write("CameraMatrix", mtx)
 
-    # Write Distortion Coefficients
     fs.write("DistortionCoeffs", dist)
 
-    # Convert extrinsics to a 3x1 shape explicitly
     rvec_fixed = np.array(rvecs[0]).reshape(3, 1)
     tvec_fixed = np.array(tvecs[0]).reshape(3, 1)
     fs.write("rvec", rvec_fixed)
     fs.write("tvec", tvec_fixed)
 
-    fs.release()  # Close file
+    fs.release()
     print(f"Camera intrinsics saved to {file_path}")
 
 if __name__ == "__main__":
