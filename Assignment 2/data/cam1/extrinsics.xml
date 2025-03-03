@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<opencv_storage>
+<rvec type_id="opencv-matrix">
+  <rows>3</rows>
+  <cols>1</cols>
+  <dt>d</dt>
+  <data>
+    -1.3988701108272212 -1.0158492344785059 -0.8122452535060013</data></rvec>
+<tvec type_id="opencv-matrix">
+  <rows>3</rows>
+  <cols>1</cols>
+  <dt>d</dt>
+  <data>
+    8.8651989008504888 148.04183601195191 1504.422982616227</data></tvec>
+</opencv_storage>
