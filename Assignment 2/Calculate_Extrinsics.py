@@ -18,7 +18,6 @@ def load_checkerboard_info(file_path):
     square_size = float(root.find("CheckerBoardSquareSize").text)
     return (width, height), square_size
 
-
 def select_corners(event, x, y, flags, param):
     if event == cv.EVENT_LBUTTONDOWN:
         if len(param['corners']) < 4:
@@ -42,15 +41,17 @@ def find_corners(image_path, chessboard_size):
     cv.destroyAllWindows()
     manual_corners = np.array(manual_corners, dtype=np.float32)
     
+    # Define destination points with Y axis flipped (Y up)
     dst_points = np.array([
         [0, 0],
-        [chessboard_size[1] - 1, 0],
-        [chessboard_size[1] - 1, chessboard_size[0] - 1],
-        [0, chessboard_size[0] - 1]
+        [chessboard_size[0] - 1, 0],
+        [chessboard_size[0] - 1, -(chessboard_size[1] - 1)],
+        [0, -(chessboard_size[1] - 1)]
     ], dtype=np.float32)
     
     H, _ = cv.findHomography(manual_corners, dst_points)
-    x_grid, y_grid = np.meshgrid(range(chessboard_size[1]), range(chessboard_size[0]))
+    # Generate grid points for the chessboard with Y axis up
+    x_grid, y_grid = np.meshgrid(range(chessboard_size[0]), -np.array(range(chessboard_size[1])))
     grid_points = np.vstack([x_grid.ravel(), y_grid.ravel()]).T.astype(np.float32)
     projected_corners = cv.perspectiveTransform(grid_points.reshape(1, -1, 2), np.linalg.inv(H))
     projected_corners = projected_corners.reshape(-1, 1, 2)
@@ -64,8 +65,11 @@ def find_corners(image_path, chessboard_size):
     return True, projected_corners
 
 def compute_extrinsics(image_path, chessboard_size, square_size, camera_matrix, dist_coeffs):
+    # Create object points with Y axis pointing up (flip y coordinate)
     objp = np.zeros((np.prod(chessboard_size), 3), np.float32)
-    objp[:, :2] = np.mgrid[0:chessboard_size[0], 0:chessboard_size[1]].T.reshape(-1, 2) * square_size
+    grid = np.mgrid[0:chessboard_size[0], 0:chessboard_size[1]].T.reshape(-1, 2)
+    grid[:, 1] = -grid[:, 1]  # Flip y axis so Y increases upward
+    objp[:, :2] = grid * square_size
     
     ret, imgpoints = find_corners(image_path, chessboard_size)
     if not ret:
@@ -80,6 +84,19 @@ def save_extrinsics(file_path, rvec, tvec):
     fs.write("rvec", rvec)
     fs.write("tvec", tvec)
     fs.release()
+
+def visualize_world_coordinates(image_path, camera_matrix, dist_coeffs, rvec, tvec, square_size):
+    img = cv.imread(image_path)
+    # Define an axis length (e.g., 3 squares long)
+    axis_length = 3 * square_size
+    # Draw the coordinate axes on the image
+    cv.drawFrameAxes(img, camera_matrix, dist_coeffs, rvec, tvec, axis_length)
+    # Overlay the translation vector (the world coordinate of the starting corner)
+    cv.putText(img, f"T: [{tvec[0][0]:.2f}, {tvec[1][0]:.2f}, {tvec[2][0]:.2f}]", (10, 30),
+               cv.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+    cv.imshow("World Coordinates", img)
+    cv.waitKey(5000)
+    cv.destroyAllWindows()
 
 def main():
     base_path = "Assignment 2/data/"
@@ -97,7 +114,8 @@ def main():
         
         if rvec is not None and tvec is not None:
             save_extrinsics(extrinsics_file, rvec, tvec)
-            print(f"Extrinsics saved for camera {cam_id}")
+            visualize_world_coordinates(image_file, camera_matrix, dist_coeffs, rvec, tvec, square_size)
+            print(f"Extrinsics saved and world coordinates visualized for camera {cam_id}")
         else:
             print(f"Could not compute extrinsics for camera {cam_id}")
 
