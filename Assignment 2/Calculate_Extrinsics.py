@@ -102,7 +102,7 @@ def main():
     base_path = "Assignment 2/data/"
     checkerboard_file = "Assignment 2/data/checkerboard.xml"
     chessboard_size, square_size = load_checkerboard_info(checkerboard_file)
-    
+
     for cam_id in range(1, 5):
         cam_path = f"{base_path}cam{cam_id}/"
         intrinsics_file = f"{cam_path}intrinsics.xml"
