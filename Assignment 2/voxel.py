@@ -1,35 +1,54 @@
 import numpy as np
 import cv2 as cv
-import glob
 import os
 
-# Task 3: Voxel Reconstruction
-def voxel_reconstruction(foreground_masks, calibration_params, voxel_step=8, grid_dims=(128, 64, 128)):
-    voxels_on = []
+from Background_Subtraction import get_background_frame
+
+def build_background_model(video_path, num_frames=30):
+
+    return get_background_frame(video_path, method="median", sample_rate=10)
+
+def get_foreground_mask(frame, bg_model, thresholds=(15, 30, 30)):
+    gray_frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+    diff = cv.absdiff(bg_model, gray_frame)
+    _, mask = cv.threshold(diff, thresholds[0], 255, cv.THRESH_BINARY)
+    kernel = np.ones((5, 5), np.uint8)
+    mask = cv.morphologyEx(mask, cv.MORPH_OPEN, kernel)
+    mask = cv.morphologyEx(mask, cv.MORPH_DILATE, kernel)
+    return mask
+
+def voxel_reconstruction(foreground_masks, calibration_params, voxel_step=8, grid_dims=(128, 64, 128), min_views=3):
+    voxel_lut = {cam: {} for cam in calibration_params.keys()}
     x_range = np.arange(0, grid_dims[0], voxel_step)
     y_range = np.arange(0, grid_dims[1], voxel_step)
     z_range = np.arange(0, grid_dims[2], voxel_step)
     
+    for cam_id, params in calibration_params.items():
+        mtx, dist, rvec, tvec = params
+        for x in x_range:
+            for y in y_range:
+                for z in z_range:
+                    point_3d = np.array([[x, y, z]], dtype=np.float32)
+                    imgpt, _ = cv.projectPoints(point_3d, rvec, tvec, mtx, dist)
+                    imgpt = imgpt.ravel().astype(int)
+                    voxel_lut[cam_id][(x, y, z)] = tuple(imgpt)
+    
+    voxels_on = []
     for x in x_range:
         for y in y_range:
             for z in z_range:
-                point_3d = np.array([[x, y, z]], dtype=np.float32)
-                valid = True
-                for cam_id, params in calibration_params.items():
-                    mtx, dist, rvec, tvec = params
-                    imgpt, _ = cv.projectPoints(point_3d, rvec, tvec, mtx, dist)
-                    imgpt = imgpt.ravel().astype(int)
+                count = 0
+                for cam_id in calibration_params.keys():
+                    imgpt = voxel_lut[cam_id][(x, y, z)]
                     mask = foreground_masks[cam_id]
                     h, w = mask.shape
-                    if imgpt[0] < 0 or imgpt[0] >= w or imgpt[1] < 0 or imgpt[1] >= h:
-                        valid = False
-                        break
-                    if mask[imgpt[1], imgpt[0]] == 0:
-                        valid = False
-                        break
-                if valid:
+                    u, v = imgpt
+                    if u < 0 or u >= w or v < 0 or v >= h:
+                        continue
+                    if mask[v, u] > 0:
+                        count += 1
+                if count >= min_views:
                     voxels_on.append([x, y, z])
-    
     return voxels_on
 
 def main():
@@ -83,7 +102,7 @@ def main():
         print("Not all cameras have valid calibration parameters. Aborting voxel reconstruction.")
         return
 
-    voxels_on = voxel_reconstruction(foreground_masks, calibration_params, voxel_step=8, grid_dims=(128, 64, 128))
+    voxels_on = voxel_reconstruction(foreground_masks, calibration_params, voxel_step=8, grid_dims=(128, 64, 128), min_views=3)
     print(f"Number of voxels reconstructed: {len(voxels_on)}")
     
 if __name__ == "__main__":
