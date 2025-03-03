@@ -184,6 +184,7 @@ def key_callback(window, key, scancode, action, mods):
         glfw.set_window_should_close(window, glfw.TRUE)
     if key == glfw.KEY_G and action == glfw.PRESS:
         global cube
+        # After obtaining voxels_on from your voxel reconstruction:
         positions, colors = set_voxel_positions(config['world_width'], config['world_height'], config['world_width'])
         cube.set_multiple_positions(positions, colors)
 
