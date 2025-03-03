@@ -5,7 +5,6 @@ import os
 video_path = "Assignment 2/data/cam4/intrinsics.avi"  # Change this to the actual video file name in your project folder
 cap = cv2.VideoCapture(video_path)
 
-# Define the screenshot save directory
 save_dir = "Assignment 2/data/cam4/intrinsics_screenshots"
 os.makedirs(save_dir, exist_ok=True)  # Create directory if it doesn't exist
 

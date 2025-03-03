@@ -43,16 +43,13 @@ def background_subtraction(background_video, people_video, output_video):
         gray_frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
         gray_frame = cv.GaussianBlur(gray_frame, (1, 1), 0)
         
-        # Compute absolute difference
         diff = cv.absdiff(background, gray_frame)
         _, mask = cv.threshold(diff, 16, 255, cv.THRESH_BINARY)
 
-        # Morphological operations to remove noise
         kernel = np.ones((5, 5), np.uint8)
         mask = cv.morphologyEx(mask, cv.MORPH_OPEN, kernel)
         mask = cv.morphologyEx(mask, cv.MORPH_DILATE, kernel)
 
-        # Extract foreground
         foreground = cv.bitwise_and(frame, frame, mask=mask)
 
         out.write(foreground)

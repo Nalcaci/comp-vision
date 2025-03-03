@@ -41,7 +41,6 @@ def find_corners(image_path, chessboard_size):
     cv.destroyAllWindows()
     manual_corners = np.array(manual_corners, dtype=np.float32)
     
-    # Define destination points with Y axis flipped (Y up)
     dst_points = np.array([
         [0, 0],
         [chessboard_size[0] - 1, 0],
@@ -50,7 +49,6 @@ def find_corners(image_path, chessboard_size):
     ], dtype=np.float32)
     
     H, _ = cv.findHomography(manual_corners, dst_points)
-    # Generate grid points for the chessboard with Y axis up
     x_grid, y_grid = np.meshgrid(range(chessboard_size[0]), -np.array(range(chessboard_size[1])))
     grid_points = np.vstack([x_grid.ravel(), y_grid.ravel()]).T.astype(np.float32)
     projected_corners = cv.perspectiveTransform(grid_points.reshape(1, -1, 2), np.linalg.inv(H))
@@ -65,10 +63,9 @@ def find_corners(image_path, chessboard_size):
     return True, projected_corners
 
 def compute_extrinsics(image_path, chessboard_size, square_size, camera_matrix, dist_coeffs):
-    # Create object points with Y axis pointing up (flip y coordinate)
     objp = np.zeros((np.prod(chessboard_size), 3), np.float32)
     grid = np.mgrid[0:chessboard_size[0], 0:chessboard_size[1]].T.reshape(-1, 2)
-    grid[:, 1] = -grid[:, 1]  # Flip y axis so Y increases upward
+    grid[:, 1] = -grid[:, 1]
     objp[:, :2] = grid * square_size
     
     ret, imgpoints = find_corners(image_path, chessboard_size)
@@ -87,11 +84,8 @@ def save_extrinsics(file_path, rvec, tvec):
 
 def visualize_world_coordinates(image_path, camera_matrix, dist_coeffs, rvec, tvec, square_size):
     img = cv.imread(image_path)
-    # Define an axis length (e.g., 3 squares long)
     axis_length = 3 * square_size
-    # Draw the coordinate axes on the image
     cv.drawFrameAxes(img, camera_matrix, dist_coeffs, rvec, tvec, axis_length)
-    # Overlay the translation vector (the world coordinate of the starting corner)
     cv.putText(img, f"T: [{tvec[0][0]:.2f}, {tvec[1][0]:.2f}, {tvec[2][0]:.2f}]", (10, 30),
                cv.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
     cv.imshow("World Coordinates", img)
