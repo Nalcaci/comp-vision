@@ -1,4 +1,4 @@
 import json
 
-with open('config.json') as file:
+with open('Computer-Vision-3D-Reconstruction-master\config.json') as file:
     config = json.load(file)
