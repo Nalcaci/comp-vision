@@ -82,10 +82,10 @@ def main():
     glEnable(GL_CULL_FACE)
     glCullFace(GL_BACK)
 
-    program = get_linked_program('resources/shaders/vert.vs', 'resources/shaders/frag.fs')
-    depth_program = get_linked_program('resources/shaders/shadow_depth.vs', 'resources/shaders/shadow_depth.fs')
-    blur_program = get_linked_program('resources/shaders/blur.vs', 'resources/shaders/blur.fs')
-    hdr_program = get_linked_program('resources/shaders/hdr.vs', 'resources/shaders/hdr.fs')
+    program = get_linked_program('Computer-Vision-3D-Reconstruction-master/resources/shaders/vert.vs', 'Computer-Vision-3D-Reconstruction-master/resources/shaders/frag.fs')
+    depth_program = get_linked_program('Computer-Vision-3D-Reconstruction-master/resources/shaders/shadow_depth.vs', 'Computer-Vision-3D-Reconstruction-master/resources/shaders/shadow_depth.fs')
+    blur_program = get_linked_program('Computer-Vision-3D-Reconstruction-master/resources/shaders/blur.vs', 'Computer-Vision-3D-Reconstruction-master/resources/shaders/blur.fs')
+    hdr_program = get_linked_program('Computer-Vision-3D-Reconstruction-master/resources/shaders/hdr.vs', 'Computer-Vision-3D-Reconstruction-master/resources/shaders/hdr.fs')
 
     blur_program.use()
     blur_program.setInt('image', 0)
@@ -107,17 +107,17 @@ def main():
     perspective = glm.perspective(45, window_width / window_height, config['near_plane'], config['far_plane'])
 
     cam_rot_matrices = get_cam_rotation_matrices()
-    cam_shapes = [Model('resources/models/camera.json', cam_rot_matrices[c]) for c in range(4)]
-    square = Model('resources/models/square.json')
-    cube = Model('resources/models/cube.json')
-    texture = load_texture_2d('resources/textures/diffuse.jpg')
-    texture_grid = load_texture_2d('resources/textures/diffuse_grid.jpg')
-    normal = load_texture_2d('resources/textures/normal.jpg')
-    normal_grid = load_texture_2d('resources/textures/normal_grid.jpg')
-    specular = load_texture_2d('resources/textures/specular.jpg')
-    specular_grid = load_texture_2d('resources/textures/specular_grid.jpg')
-    depth = load_texture_2d('resources/textures/depth.jpg')
-    depth_grid = load_texture_2d('resources/textures/depth_grid.jpg')
+    cam_shapes = [Model('Computer-Vision-3D-Reconstruction-master/resources/models/camera.json', cam_rot_matrices[c]) for c in range(4)]
+    square = Model('Computer-Vision-3D-Reconstruction-master/resources/models/square.json')
+    cube = Model('Computer-Vision-3D-Reconstruction-master/resources/models/cube.json')
+    texture = load_texture_2d('Computer-Vision-3D-Reconstruction-master/resources/textures/diffuse.jpg')
+    texture_grid = load_texture_2d('Computer-Vision-3D-Reconstruction-master/resources/textures/diffuse_grid.jpg')
+    normal = load_texture_2d('Computer-Vision-3D-Reconstruction-master/resources/textures/normal.jpg')
+    normal_grid = load_texture_2d('Computer-Vision-3D-Reconstruction-master/resources/textures/normal_grid.jpg')
+    specular = load_texture_2d('Computer-Vision-3D-Reconstruction-master/resources/textures/specular.jpg')
+    specular_grid = load_texture_2d('Computer-Vision-3D-Reconstruction-master/resources/textures/specular_grid.jpg')
+    depth = load_texture_2d('Computer-Vision-3D-Reconstruction-master/resources/textures/depth.jpg')
+    depth_grid = load_texture_2d('Computer-Vision-3D-Reconstruction-master/resources/textures/depth_grid.jpg')
 
     grid_positions, grid_colors = generate_grid(config['world_width'], config['world_width'])
     square.set_multiple_positions(grid_positions, grid_colors)
