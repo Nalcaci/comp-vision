@@ -4,145 +4,13 @@ import glob
 import os
 
 # -----------------------------
-# Task 1: Calibration and 3D axes
-# -----------------------------
-
-# Chessboard parameters
-chessboard_size = (6, 8)  # Internal corners (rows, columns)
-square_size = 115         # Square size in mm
-
-# Criteria for corner refinement
-criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 25, 0.001)
-
-# Prepare 3D object points for the chessboard (all inner corners)
-objp = np.zeros((np.prod(chessboard_size), 3), np.float32)
-objp[:, :2] = np.mgrid[0:chessboard_size[0], 0:chessboard_size[1]].T.reshape(-1, 2) * square_size
-
-def draw_axes_on_chessboard(image, mtx, dist, rvec, tvec, square_size):
-    """
-    Projects 3D axes endpoints (X, Y, Z) starting at the checkerboard's origin
-    and draws them on the image.
-    X axis: red, Y axis: green, Z axis: blue.
-    """
-    origin = np.array([[0, 0, 0]], dtype=np.float32)
-    x_axis = np.array([[3 * square_size, 0, 0]], dtype=np.float32)
-    y_axis = np.array([[0, 3 * square_size, 0]], dtype=np.float32)
-    z_axis = np.array([[0, 0, -3 * square_size]], dtype=np.float32)  # negative so it appears coming "out" of the board
-
-    imgpts_origin, _ = cv.projectPoints(origin, rvec, tvec, mtx, dist)
-    imgpts_x, _ = cv.projectPoints(x_axis, rvec, tvec, mtx, dist)
-    imgpts_y, _ = cv.projectPoints(y_axis, rvec, tvec, mtx, dist)
-    imgpts_z, _ = cv.projectPoints(z_axis, rvec, tvec, mtx, dist)
-
-    origin_pt = tuple(imgpts_origin.ravel().astype(int))
-    x_pt = tuple(imgpts_x.ravel().astype(int))
-    y_pt = tuple(imgpts_y.ravel().astype(int))
-    z_pt = tuple(imgpts_z.ravel().astype(int))
-
-    cv.line(image, origin_pt, x_pt, (0, 0, 255), 3)  # X-axis in red
-    cv.line(image, origin_pt, y_pt, (0, 255, 0), 3)  # Y-axis in green
-    cv.line(image, origin_pt, z_pt, (255, 0, 0), 3)  # Z-axis in blue
-
-    cv.putText(image, "X", x_pt, cv.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-    cv.putText(image, "Y", y_pt, cv.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
-    cv.putText(image, "Z", z_pt, cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 0), 2)
-    return image
-
-def select_corners(event, x, y, flags, param):
-    if event == cv.EVENT_LBUTTONDOWN:
-        if len(param['corners']) < 4:
-            param['corners'].append((x, y))
-            print(f"Corner {len(param['corners'])} selected at ({x}, {y})")
-            if len(param['corners']) == 4:
-                print("All 4 corners selected.")
-
-def calibrate_camera_from_images(images, showResults=True):
-    """
-    Given a list of calibration images, detects the chessboard corners (or lets the user select them)
-    and computes the camera intrinsics and extrinsics.
-    Saves the intrinsics (and optionally extrinsics) into an XML file.
-    Returns (mtx, dist, rvecs, tvecs, image_size).
-    """
-    objpoints = []  # 3D world points
-    imgpoints = []  # 2D image points
-
-    for fname in images:
-        img = cv.imread(fname)
-        if img is None:
-            continue
-        gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-        ret, corners = cv.findChessboardCorners(gray, chessboard_size, None)
-        if ret:
-            objpoints.append(objp)
-            corners2 = cv.cornerSubPix(gray, corners, (11,11), (-1,-1), criteria)
-            imgpoints.append(corners2)
-            if showResults:
-                cv.drawChessboardCorners(img, chessboard_size, corners2, ret)
-                cv.imshow("Calibration", img)
-                cv.waitKey(200)
-        else:
-            print(f"Chessboard not automatically detected in {fname}.")
-            manual_corners = []
-            cv.namedWindow('Calibration')
-            cv.setMouseCallback('Calibration', select_corners, {'corners': manual_corners})
-            while len(manual_corners) < 4:
-                cv.imshow('Calibration', img)
-                cv.waitKey(10)
-            manual_corners = np.array(manual_corners, dtype=np.float32)
-            dst_points = np.array([
-                [0, 0],
-                [chessboard_size[1]-1, 0],
-                [chessboard_size[1]-1, chessboard_size[0]-1],
-                [0, chessboard_size[0]-1]
-            ], dtype=np.float32) * square_size
-            H, status = cv.findHomography(manual_corners, dst_points)
-            if H is None:
-                print("Homography computation failed.")
-                continue
-            x_grid, y_grid = np.meshgrid(range(chessboard_size[1]), range(chessboard_size[0]))
-            grid_points = np.vstack([x_grid.ravel(), y_grid.ravel()]).T.astype(np.float32) * square_size
-            projected_corners = cv.perspectiveTransform(grid_points.reshape(1, -1, 2), np.linalg.inv(H))
-            projected_corners = projected_corners.reshape(-1, 1, 2)
-            objpoints.append(objp)
-            imgpoints.append(projected_corners)
-            for point in projected_corners:
-                cv.circle(img, tuple(point.ravel().astype(int)), 5, (0, 255, 0), -1)
-            cv.imshow("Calibration", img)
-            cv.waitKey(500)
-    cv.destroyAllWindows()
-    # Use the first image to get the image size.
-    sample_img = cv.imread(images[0])
-    if sample_img is None:
-        raise ValueError("Sample image could not be read.")
-    gray = cv.cvtColor(sample_img, cv.COLOR_BGR2GRAY)
-    image_size = gray.shape[::-1]
-    ret, mtx, dist, rvecs, tvecs = cv.calibrateCamera(objpoints, imgpoints, image_size, None, None)
-    print(f"Reprojection Error: {ret}")
-    print(f"Camera Matrix:\n{mtx}")
-    print(f"Distortion Coefficients:\n{dist}")
-
-    # Save calibration to XML (for example, in cam4 directory)
-    file_path = os.path.join("Assignment 2", "data", "cam4", "intrinsics.xml")
-    # Ensure the target directory exists
-    os.makedirs(os.path.dirname(file_path), exist_ok=True)
-    fs = cv.FileStorage(file_path, cv.FILE_STORAGE_WRITE)
-    fs.write("CameraMatrix", mtx)
-    fs.write("DistortionCoeffs", dist)
-    # Optionally save the first extrinsics (rvec and tvec) for visualization:
-    fs.write("rvec", rvecs[0])
-    fs.write("tvec", tvecs[0])
-    fs.release()
-    print(f"Calibration parameters saved to {file_path}")
-
-    return mtx, dist, rvecs, tvecs, image_size
-
-# -----------------------------
 # Task 2: Background Subtraction
 # -----------------------------
 
 def build_background_model(video_path, num_frames=30):
     """
-    Reads a number of frames from a background video, converts them to HSV, and computes their average.
+    Reads a number of frames from a background video, converts them to HSV,
+    applies Gaussian blur to reduce noise, and computes their average.
     Returns the background model (as an HSV image).
     """
     cap = cv.VideoCapture(video_path)
@@ -155,6 +23,8 @@ def build_background_model(video_path, num_frames=30):
         if not ret:
             break
         frame_hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
+        # Apply Gaussian blur for noise reduction
+        frame_hsv = cv.GaussianBlur(frame_hsv, (5, 5), 0)
         frames.append(frame_hsv.astype(np.float32))
         count += 1
     cap.release()
@@ -165,18 +35,26 @@ def build_background_model(video_path, num_frames=30):
 
 def get_foreground_mask(frame, background_model, thresholds=(15, 30, 30)):
     """
-    Converts a frame to HSV and computes its absolute difference to the background model.
-    Applies per-channel thresholds (for H, S, V) and combines the results to produce a binary mask.
-    Morphological operations help reduce noise.
+    Converts a frame to HSV, applies Gaussian blur, computes its absolute difference
+    to the background model, and thresholds each HSV channel.
+    Combines the channel masks and applies morphological operations to produce a clean binary mask.
     """
     frame_hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
-    diff = cv.absdiff(frame_hsv, background_model)
-    _, mask_h = cv.threshold(diff[:,:,0], thresholds[0], 255, cv.THRESH_BINARY)
-    _, mask_s = cv.threshold(diff[:,:,1], thresholds[1], 255, cv.THRESH_BINARY)
-    _, mask_v = cv.threshold(diff[:,:,2], thresholds[2], 255, cv.THRESH_BINARY)
+    frame_hsv = cv.GaussianBlur(frame_hsv, (5, 5), 0)
+    background_blurred = cv.GaussianBlur(background_model, (5, 5), 0)
+    diff = cv.absdiff(frame_hsv, background_blurred)
+    
+    # Threshold each channel separately
+    _, mask_h = cv.threshold(diff[:, :, 0], thresholds[0], 255, cv.THRESH_BINARY)
+    _, mask_s = cv.threshold(diff[:, :, 1], thresholds[1], 255, cv.THRESH_BINARY)
+    _, mask_v = cv.threshold(diff[:, :, 2], thresholds[2], 255, cv.THRESH_BINARY)
+    
+    # Combine masks: a pixel is considered foreground only if all channels exceed the threshold
     mask = cv.bitwise_and(mask_h, mask_s)
     mask = cv.bitwise_and(mask, mask_v)
-    kernel = np.ones((3,3), np.uint8)
+    
+    # Apply morphological operations to remove noise
+    kernel = np.ones((3, 3), np.uint8)
     mask = cv.morphologyEx(mask, cv.MORPH_OPEN, kernel)
     mask = cv.morphologyEx(mask, cv.MORPH_CLOSE, kernel)
     return mask
@@ -185,19 +63,18 @@ def get_foreground_mask(frame, background_model, thresholds=(15, 30, 30)):
 # Task 3: Voxel Reconstruction
 # -----------------------------
 
-def voxel_reconstruction(foreground_masks, calibration_params, voxel_step=8):
+def voxel_reconstruction(foreground_masks, calibration_params, voxel_step=8, grid_dims=(128, 64, 128)):
     """
-    Given a dictionary of foreground masks (one per camera) and the corresponding calibration parameters,
-    this function iterates over a predefined voxel grid (a half-cube of size 128x64x128, with 'y' as up)
-    and uses projectPoints() to map each voxel into the image planes.
-    A voxel is considered part of the reconstructed volume if its projection lands on a foreground pixel
+    Iterates over a voxel grid (default dimensions: 128 (x) x 64 (y) x 128 (z) with y as up) and uses projectPoints()
+    to map each voxel into each camera’s image plane. A voxel is "on" if its projection lands on a foreground pixel
     in every camera.
-    Returns a list of voxels that are "on" (each voxel is [x, y, z]).
+    Returns a list of "on" voxels (each as [x, y, z]).
     """
     voxels_on = []
-    x_range = np.arange(0, 128, voxel_step)
-    y_range = np.arange(0, 64, voxel_step)
-    z_range = np.arange(0, 128, voxel_step)
+    x_range = np.arange(0, grid_dims[0], voxel_step)
+    y_range = np.arange(0, grid_dims[1], voxel_step)
+    z_range = np.arange(0, grid_dims[2], voxel_step)
+    
     for x in x_range:
         for y in y_range:
             for z in z_range:
@@ -209,14 +86,18 @@ def voxel_reconstruction(foreground_masks, calibration_params, voxel_step=8):
                     imgpt = imgpt.ravel().astype(int)
                     mask = foreground_masks[cam_id]
                     h, w = mask.shape
+                    # Check if the projected point is within the image bounds
                     if imgpt[0] < 0 or imgpt[0] >= w or imgpt[1] < 0 or imgpt[1] >= h:
                         valid = False
                         break
+                    # Check if the corresponding pixel is foreground
                     if mask[imgpt[1], imgpt[0]] == 0:
                         valid = False
                         break
                 if valid:
                     voxels_on.append([x, y, z])
+    
+    # Optional: Additional post-processing (e.g., removing isolated voxels or filling holes)
     return voxels_on
 
 # -----------------------------
@@ -224,30 +105,12 @@ def voxel_reconstruction(foreground_masks, calibration_params, voxel_step=8):
 # -----------------------------
 
 def main():
-    # === Task 1: Calibration and 3D Axes Visualization ===
-    # For example, calibrate camera from screenshots (e.g., for cam4).
-    cam_dir = os.path.join("Assignment 2", "data", "cam4")
-    image_path = os.path.join(cam_dir, "intrinsics_screenshots", "*.png")
-    images = glob.glob(image_path)
-    if len(images) == 0:
-        print("No calibration images found. Check the path.")
-    else:
-        mtx, dist, rvecs, tvecs, image_size = calibrate_camera_from_images(images, showResults=True)
-        # Load one calibration image to overlay the 3D axes.
-        img = cv.imread(images[0])
-        if img is not None:
-            img_with_axes = draw_axes_on_chessboard(img.copy(), mtx, dist, rvecs[0], tvecs[0], square_size)
-            cv.imshow("Calibration with 3D Axes", img_with_axes)
-            cv.waitKey(0)
-            cv.destroyAllWindows()
-    
-    # === Task 2: Background Subtraction ===
     cam_ids = ['cam1', 'cam2', 'cam3', 'cam4']
     base_path = os.path.join("Assignment 2", "data")
     calibration_params = {}  # To store (mtx, dist, rvec, tvec) per camera
-    foreground_masks = {}    # To store one foreground mask per camera (for a chosen frame)
+    foreground_masks = {}    # To store one foreground mask per camera
     
-    # For each camera, load calibration parameters (from config.xml if available, else intrinsics.xml)
+    # For each camera, load calibration parameters from XML
     for cam in cam_ids:
         cam_path = os.path.join(base_path, cam)
         config_file = os.path.join(cam_path, "intrinsics.xml")
@@ -261,7 +124,7 @@ def main():
         tvec = fs.getNode("tvec").mat() if not fs.getNode("tvec").empty() else None
         fs.release()
         if rvec is None or tvec is None:
-            print(f"Extrinsics not found for {cam}. Run calibration for {cam} first.")
+            print(f"Extrinsics not found for {cam}. Please ensure XML contains rvec and tvec.")
             continue
         calibration_params[cam] = (mtx, dist, rvec, tvec)
         
@@ -273,7 +136,7 @@ def main():
             print(f"Error building background model for {cam}: {e}")
             continue
         
-        # For demonstration, process the first frame of video.avi to extract the foreground mask.
+        # Process the first frame of video.avi to extract the foreground mask.
         video_path = os.path.join(cam_path, "video.avi")
         cap = cv.VideoCapture(video_path)
         if not cap.isOpened():
@@ -295,11 +158,11 @@ def main():
         print("Not all cameras have valid calibration parameters. Aborting voxel reconstruction.")
         return
 
-    # === Task 3: Voxel Reconstruction ===
-    voxels_on = voxel_reconstruction(foreground_masks, calibration_params, voxel_step=8)
+    # Perform voxel reconstruction (Task 3)
+    voxels_on = voxel_reconstruction(foreground_masks, calibration_params, voxel_step=8, grid_dims=(128, 64, 128))
     print(f"Number of voxels reconstructed: {len(voxels_on)}")
     
-    # Integration with the visualization module (if available):
+    # Integration with visualization (if available):
     # For example:
     # from visualization_module import display_voxels
     # display_voxels(voxels_on)
