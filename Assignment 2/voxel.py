@@ -3,6 +3,7 @@ import cv2 as cv
 import glob
 import os
 
+
 # -----------------------------
 # Task 2: Background Subtraction
 # -----------------------------
@@ -105,6 +106,10 @@ def voxel_reconstruction(foreground_masks, calibration_params, voxel_step=8, gri
 # -----------------------------
 
 def main():
+    # === Task 1: Calibration and 3D Axes Visualization ===
+    # For example, calibrate camera from screenshots (e.g., for cam4).
+    
+    # === Task 2: Background Subtraction ===
     cam_ids = ['cam1', 'cam2', 'cam3', 'cam4']
     base_path = os.path.join("Assignment 2", "data")
     calibration_params = {}  # To store (mtx, dist, rvec, tvec) per camera
