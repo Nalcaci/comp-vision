@@ -18,10 +18,6 @@ criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 25, 0.001)
 objp = np.zeros((np.prod(chessboard_size), 3), np.float32)
 objp[:, :2] = np.mgrid[0:chessboard_size[0], 0:chessboard_size[1]].T.reshape(-1, 2) * square_size
 
-# Storage for object and image points (used during calibration)
-objpoints = []  # 3D world points
-imgpoints = []  # 2D image points
-
 def draw_axes_on_chessboard(image, mtx, dist, rvec, tvec, square_size):
     """
     Projects 3D axes endpoints (X, Y, Z) starting at the checkerboard's origin
@@ -67,7 +63,9 @@ def calibrate_camera_from_images(images, showResults=True):
     Saves the intrinsics (and optionally extrinsics) into an XML file.
     Returns (mtx, dist, rvecs, tvecs, image_size).
     """
-    global objpoints, imgpoints
+    objpoints = []  # 3D world points
+    imgpoints = []  # 2D image points
+
     for fname in images:
         img = cv.imread(fname)
         if img is None:
@@ -89,7 +87,7 @@ def calibrate_camera_from_images(images, showResults=True):
             cv.setMouseCallback('Calibration', select_corners, {'corners': manual_corners})
             while len(manual_corners) < 4:
                 cv.imshow('Calibration', img)
-                cv.waitKey(1)
+                cv.waitKey(10)
             manual_corners = np.array(manual_corners, dtype=np.float32)
             dst_points = np.array([
                 [0, 0],
@@ -97,7 +95,10 @@ def calibrate_camera_from_images(images, showResults=True):
                 [chessboard_size[1]-1, chessboard_size[0]-1],
                 [0, chessboard_size[0]-1]
             ], dtype=np.float32) * square_size
-            H, _ = cv.findHomography(manual_corners, dst_points)
+            H, status = cv.findHomography(manual_corners, dst_points)
+            if H is None:
+                print("Homography computation failed.")
+                continue
             x_grid, y_grid = np.meshgrid(range(chessboard_size[1]), range(chessboard_size[0]))
             grid_points = np.vstack([x_grid.ravel(), y_grid.ravel()]).T.astype(np.float32) * square_size
             projected_corners = cv.perspectiveTransform(grid_points.reshape(1, -1, 2), np.linalg.inv(H))
@@ -111,6 +112,8 @@ def calibrate_camera_from_images(images, showResults=True):
     cv.destroyAllWindows()
     # Use the first image to get the image size.
     sample_img = cv.imread(images[0])
+    if sample_img is None:
+        raise ValueError("Sample image could not be read.")
     gray = cv.cvtColor(sample_img, cv.COLOR_BGR2GRAY)
     image_size = gray.shape[::-1]
     ret, mtx, dist, rvecs, tvecs = cv.calibrateCamera(objpoints, imgpoints, image_size, None, None)
@@ -120,6 +123,8 @@ def calibrate_camera_from_images(images, showResults=True):
 
     # Save calibration to XML (for example, in cam4 directory)
     file_path = os.path.join("Assignment 2", "data", "cam4", "intrinsics.xml")
+    # Ensure the target directory exists
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
     fs = cv.FileStorage(file_path, cv.FILE_STORAGE_WRITE)
     fs.write("CameraMatrix", mtx)
     fs.write("DistortionCoeffs", dist)
@@ -141,6 +146,8 @@ def build_background_model(video_path, num_frames=30):
     Returns the background model (as an HSV image).
     """
     cap = cv.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise ValueError(f"Video file {video_path} cannot be opened.")
     frames = []
     count = 0
     while count < num_frames:
@@ -164,14 +171,11 @@ def get_foreground_mask(frame, background_model, thresholds=(15, 30, 30)):
     """
     frame_hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
     diff = cv.absdiff(frame_hsv, background_model)
-    # Threshold differences for each channel:
     _, mask_h = cv.threshold(diff[:,:,0], thresholds[0], 255, cv.THRESH_BINARY)
     _, mask_s = cv.threshold(diff[:,:,1], thresholds[1], 255, cv.THRESH_BINARY)
     _, mask_v = cv.threshold(diff[:,:,2], thresholds[2], 255, cv.THRESH_BINARY)
-    # Combine channels: a pixel is foreground if all three thresholds are exceeded.
     mask = cv.bitwise_and(mask_h, mask_s)
     mask = cv.bitwise_and(mask, mask_v)
-    # Optional post-processing to remove noise:
     kernel = np.ones((3,3), np.uint8)
     mask = cv.morphologyEx(mask, cv.MORPH_OPEN, kernel)
     mask = cv.morphologyEx(mask, cv.MORPH_CLOSE, kernel)
@@ -188,15 +192,12 @@ def voxel_reconstruction(foreground_masks, calibration_params, voxel_step=8):
     and uses projectPoints() to map each voxel into the image planes.
     A voxel is considered part of the reconstructed volume if its projection lands on a foreground pixel
     in every camera.
-    The voxel grid is sampled with the provided voxel_step to speed-up computation.
     Returns a list of voxels that are "on" (each voxel is [x, y, z]).
     """
     voxels_on = []
-    # Define voxel grid boundaries.
     x_range = np.arange(0, 128, voxel_step)
     y_range = np.arange(0, 64, voxel_step)
     z_range = np.arange(0, 128, voxel_step)
-    # Note: In a production setting, consider vectorizing this loop.
     for x in x_range:
         for y in y_range:
             for z in z_range:
@@ -234,29 +235,28 @@ def main():
         mtx, dist, rvecs, tvecs, image_size = calibrate_camera_from_images(images, showResults=True)
         # Load one calibration image to overlay the 3D axes.
         img = cv.imread(images[0])
-        img_with_axes = draw_axes_on_chessboard(img.copy(), mtx, dist, rvecs[0], tvecs[0], square_size)
-        cv.imshow("Calibration with 3D Axes", img_with_axes)
-        cv.waitKey(0)
-        cv.destroyAllWindows()
+        if img is not None:
+            img_with_axes = draw_axes_on_chessboard(img.copy(), mtx, dist, rvecs[0], tvecs[0], square_size)
+            cv.imshow("Calibration with 3D Axes", img_with_axes)
+            cv.waitKey(0)
+            cv.destroyAllWindows()
     
     # === Task 2: Background Subtraction ===
-    # Process each camera (assume 4 cameras) for background modeling and foreground extraction.
-    cam_ids = ['cam4']
+    cam_ids = ['cam1', 'cam2', 'cam3', 'cam4']
     base_path = os.path.join("Assignment 2", "data")
-    calibration_params = {}     # To store (mtx, dist, rvec, tvec) per camera
-    foreground_masks = {}         # To store one foreground mask per camera (for a chosen frame)
+    calibration_params = {}  # To store (mtx, dist, rvec, tvec) per camera
+    foreground_masks = {}    # To store one foreground mask per camera (for a chosen frame)
     
     # For each camera, load calibration parameters (from config.xml if available, else intrinsics.xml)
     for cam in cam_ids:
         cam_path = os.path.join(base_path, cam)
-        # Prefer config.xml (which should contain extrinsics) over intrinsics.xml.
-        config_file = os.path.join(cam_path, "config.xml")
-        if not os.path.exists(config_file):
-            config_file = os.path.join(cam_path, "intrinsics.xml")
+        config_file = os.path.join(cam_path, "intrinsics.xml")
         fs = cv.FileStorage(config_file, cv.FILE_STORAGE_READ)
+        if not fs.isOpened():
+            print(f"Failed to open {config_file} for {cam}.")
+            continue
         mtx = fs.getNode("CameraMatrix").mat()
         dist = fs.getNode("DistortionCoeffs").mat()
-        # Extrinsics (rvec and tvec) are expected to be saved after calibration.
         rvec = fs.getNode("rvec").mat() if not fs.getNode("rvec").empty() else None
         tvec = fs.getNode("tvec").mat() if not fs.getNode("tvec").empty() else None
         fs.release()
@@ -276,6 +276,9 @@ def main():
         # For demonstration, process the first frame of video.avi to extract the foreground mask.
         video_path = os.path.join(cam_path, "video.avi")
         cap = cv.VideoCapture(video_path)
+        if not cap.isOpened():
+            print(f"Failed to open video for {cam}.")
+            continue
         ret, frame = cap.read()
         cap.release()
         if not ret:
@@ -284,7 +287,6 @@ def main():
         mask = get_foreground_mask(frame, bg_model, thresholds=(15, 30, 30))
         foreground_masks[cam] = mask
         
-        # Optionally, display the foreground mask for each camera:
         cv.imshow(f"Foreground Mask - {cam}", mask)
         cv.waitKey(200)
     cv.destroyAllWindows()
@@ -294,18 +296,13 @@ def main():
         return
 
     # === Task 3: Voxel Reconstruction ===
-    # For simplicity, here we reconstruct voxels for the current frame (one foreground mask per camera).
-    # The voxel grid is defined as a half-cube (side lengths 128, height 64) with a sampling step.
     voxels_on = voxel_reconstruction(foreground_masks, calibration_params, voxel_step=8)
     print(f"Number of voxels reconstructed: {len(voxels_on)}")
     
-    # Integration with the visualization module:
-    # At this point you would hand over the voxel list (voxels_on) to the 3D visualization routines
-    # provided in the repository (e.g., through a function like display_voxels(voxels_on)).
+    # Integration with the visualization module (if available):
     # For example:
     # from visualization_module import display_voxels
     # display_voxels(voxels_on)
-    # (The actual function names and integration depend on the repository's code structure.)
     
 if __name__ == "__main__":
     main()

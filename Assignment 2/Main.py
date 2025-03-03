@@ -17,6 +17,8 @@ objp[:, :2] = np.mgrid[0:chessboard_size[0], 0:chessboard_size[1]].T.reshape(-1,
 objpoints = []  # 3D world points
 imgpoints = []  # 2D image points
 
+cam_file = "cam4"
+
 def draw_axes_on_chessboard(image, mtx, dist, rvec, tvec, square_size):
     """
     Draws the X, Y, Z axes on the image starting from the origin (top-left corner of the chessboard).
@@ -52,7 +54,7 @@ def draw_axes_on_chessboard(image, mtx, dist, rvec, tvec, square_size):
     return image
 
 def Main():
-    images = GetImages("Assignment 2/data/cam1/intrinsics_screenshots/*.png")
+    images = GetImages("Assignment 2/data/" + cam_file + "/intrinsics_screenshots/*.png")
     if not images:
         print("No images found! Check the folder path.")
         return
@@ -81,7 +83,7 @@ def Main():
     cv.destroyAllWindows()
 
     # Save the result image to file.
-    result_path = "Assignment 2/data/cam4/calibration_with_axes.png"
+    result_path = "Assignment 2/data/" + cam_file + "/calibration_with_axes.png"
     cv.imwrite(result_path, img_with_axes)
     print(f"Calibration image with axes saved to {result_path}")
 
@@ -120,7 +122,6 @@ def InitialCalibration(images: list, showResults: bool):
 
             if showResults:
                 cv.drawChessboardCorners(img, chessboard_size, corners, ret)
-                img_with_axes = draw_axes_on_chessboard(img.copy(), mtx, dist, rvec, tvec, square_size)
                 cv.imshow("img", img)
                 cv.waitKey(200)
         else:
@@ -165,7 +166,7 @@ def InitialCalibration(images: list, showResults: bool):
     print(f"Distortion Coefficients:\n{dist}")
 
     # Save the intrinsics to an XML file.
-    file_path = "Assignment 2/data/cam4/intrinsics.xml"
+    file_path = "Assignment 2/data/" + cam_file + "/intrinsics.xml"
     fs = cv.FileStorage(file_path, cv.FILE_STORAGE_WRITE)
     fs.write("CameraMatrix", mtx)
     fs.write("DistortionCoeffs", dist)

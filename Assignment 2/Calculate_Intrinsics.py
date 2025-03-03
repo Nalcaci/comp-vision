@@ -18,10 +18,11 @@ objp[:, :2] = np.mgrid[0:chessboard_size[0], 0:chessboard_size[1]].T.reshape(-1,
 objpoints = []  # 3D points
 imgpoints = []  # 2D points
 
+cam_file = "cam4"
 
 # Main function controls the flow
 def Main():
-    images = GetImages("Assignment 2/data/cam3/intrinsics_screenshots/*.png")
+    images = GetImages("Assignment 2/data/" + cam_file + "/intrinsics_screenshots/*.png")
     if not images:
         print("No images found! Check the folder path.")
         return
@@ -118,7 +119,7 @@ def InitialCalibration(images: list[str], showResults: bool):
     print(f" Distortion Coefficients:\n{dist}")
 
     # Save to XML
-    file_path = "Assignment 2/data/cam4/intrinsics.xml"
+    file_path = "Assignment 2/data/" + cam_file + "/intrinsics.xml"
     fs = cv.FileStorage(file_path, cv.FILE_STORAGE_WRITE)
 
     # Write Camera Matrix
@@ -126,6 +127,12 @@ def InitialCalibration(images: list[str], showResults: bool):
 
     # Write Distortion Coefficients
     fs.write("DistortionCoeffs", dist)
+
+    # Convert extrinsics to a 3x1 shape explicitly
+    rvec_fixed = np.array(rvecs[0]).reshape(3, 1)
+    tvec_fixed = np.array(tvecs[0]).reshape(3, 1)
+    fs.write("rvec", rvec_fixed)
+    fs.write("tvec", tvec_fixed)
 
     fs.release()  # Close file
     print(f"Camera intrinsics saved to {file_path}")
