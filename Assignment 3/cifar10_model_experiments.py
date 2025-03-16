@@ -50,7 +50,7 @@ class LeNet5Variant1(nn.Module):
         self.pool2 = nn.AvgPool2d(kernel_size=2, stride=2)
         
         self.fc1 = nn.Linear(16 * 5 * 5, 120)
-        self.dropout = nn.Dropout(p=0.5)  # Added dropout for regularization
+        self.dropout = nn.Dropout(p=0.25)  # Added dropout for regularization
         self.fc2 = nn.Linear(120, 84)
         self.fc3 = nn.Linear(84, 10)
         

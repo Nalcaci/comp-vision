@@ -102,7 +102,7 @@ class LeNet5(nn.Module):
         self.fc3 = nn.Linear(84, num_classes)
         self.use_dropout = dropout
         if self.use_dropout:
-            self.dropout = nn.Dropout(p=0.5)
+            self.dropout = nn.Dropout(p=0.25)
         
         # Weight initialization with Kaiming Uniform
         nn.init.kaiming_uniform_(self.conv1.weight, nonlinearity='relu')
@@ -204,6 +204,32 @@ def plot_confusion_matrix(cm, classes, title='Confusion Matrix'):
     plt.xlabel("Predicted")
     plt.ylabel("True")
     plt.title(title)
+    plt.show()
+    
+def plot_loss_curves(history_baseline, history_variant1, history_variant2):
+    epochs = range(1, len(history_baseline["epoch"]) + 1)
+
+    plt.figure(figsize=(10, 6))
+
+    # Plot baseline LeNet model
+    plt.plot(epochs, history_baseline["train_loss"], label="Train Loss (LeNet)", linestyle='-', marker='o')
+    plt.plot(epochs, history_baseline["val_loss"], label="Val Loss (LeNet)", linestyle='--', marker='x')
+
+    # Plot variant 1 model
+    plt.plot(epochs, history_variant1["train_loss"], label="Train Loss (Variant 1)", linestyle='-', marker='o')
+    plt.plot(epochs, history_variant1["val_loss"], label="Val Loss (Variant 1)", linestyle='--', marker='x')
+
+    # Plot variant 2 model
+    plt.plot(epochs, history_variant2["train_loss"], label="Train Loss (Variant 2)", linestyle='-', marker='o')
+    plt.plot(epochs, history_variant2["val_loss"], label="Val Loss (Variant 2)", linestyle='--', marker='x')
+
+    # Adding labels and title
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.title("Training and Validation Loss Curves for CIFAR Models")
+    plt.legend()
+
+    # Show the plot
     plt.show()
 
 # ----------------------
@@ -327,6 +353,8 @@ def main():
     
     print(f"Best CIFAR-10 Model Test Accuracy: {test_acc_best*100:.2f}%")
     print(f"CIFAR10_pretrained Model Test Accuracy: {test_acc_pretrained*100:.2f}%")
+    
+    plot_loss_curves(history_baseline, history_variant1, history_variant2)
     
     # Compute confusion matrices
     cm_best = confusion_matrix(labels_best, preds_best)
