@@ -11,18 +11,10 @@ from sklearn.metrics import confusion_matrix
 import pandas as pd
 import os
 
-# ----------------------
-# Custom CIFAR-100 Wrapper to Return Coarse Labels
-# ----------------------
 class CIFAR100Coarse(torchvision.datasets.CIFAR100):
-    """
-    A wrapper around torchvision.datasets.CIFAR100 that converts fine labels
-    into coarse labels (20 classes) using a fixed mapping.
-    """
     def __init__(self, root, train=True, transform=None, target_transform=None, download=False):
         super().__init__(root=root, train=train, transform=transform, 
                          target_transform=target_transform, download=download)
-        # Hard-coded mapping from fine labels (0-99) to coarse labels (0-19)
         self.fine_to_coarse = [
             4, 1, 14, 8, 0, 6, 7, 7, 18, 3,
             3, 14, 9, 18, 7, 11, 3, 9, 7, 11,
@@ -37,14 +29,11 @@ class CIFAR100Coarse(torchvision.datasets.CIFAR100):
         ]
     
     def __getitem__(self, index):
-        # Get image and the original fine label from the parent class
         img, fine_label = super().__getitem__(index)
         coarse_label = self.fine_to_coarse[fine_label]
         return img, coarse_label
 
-# ----------------------
-# Data Loading Functions
-# ----------------------
+# Dataset Functions
 def load_cifar10(batch_size=32, split_ratio=0.8):
     transform = transforms.Compose([
         transforms.ToTensor(),
@@ -65,7 +54,6 @@ def load_cifar100(batch_size=32, split_ratio=0.8):
         transforms.ToTensor(),
         transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5))
     ])
-    # Use the custom wrapper to get coarse labels (20 classes)
     trainset = CIFAR100Coarse(root='./data', train=True, download=True, transform=transform)
     testset  = CIFAR100Coarse(root='./data', train=False, download=True, transform=transform)
     train_size = int(split_ratio * len(trainset))
@@ -76,20 +64,11 @@ def load_cifar100(batch_size=32, split_ratio=0.8):
     test_loader  = DataLoader(testset, batch_size=batch_size, shuffle=False)
     return train_loader, val_loader, test_loader
 
-# ----------------------
-# Model Definitions
-# ----------------------
 class LeNet5(nn.Module):
-    """
-    LeNet-5 implementation with options for:
-      - num_classes: number of output classes (default 10 for CIFAR-10)
-      - pooling_type: 'avg' for average pooling or 'max' for max pooling
-      - dropout: if True, applies dropout after fc1 (p=0.5)
-    """
     def __init__(self, num_classes=10, pooling_type='avg', dropout=False):
         super(LeNet5, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=6, kernel_size=5)  # 32x32 -> 28x28
-        self.conv2 = nn.Conv2d(in_channels=6, out_channels=16, kernel_size=5) # 28x28 -> 10x10 after pooling
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=6, kernel_size=5)
+        self.conv2 = nn.Conv2d(in_channels=6, out_channels=16, kernel_size=5)
         if pooling_type == 'avg':
             self.pool = nn.AvgPool2d(kernel_size=2, stride=2)
         elif pooling_type == 'max':
@@ -104,7 +83,6 @@ class LeNet5(nn.Module):
         if self.use_dropout:
             self.dropout = nn.Dropout(p=0.25)
         
-        # Weight initialization with Kaiming Uniform
         nn.init.kaiming_uniform_(self.conv1.weight, nonlinearity='relu')
         nn.init.kaiming_uniform_(self.conv2.weight, nonlinearity='relu')
         nn.init.kaiming_uniform_(self.fc1.weight, nonlinearity='relu')
@@ -112,9 +90,9 @@ class LeNet5(nn.Module):
         nn.init.kaiming_uniform_(self.fc3.weight, nonlinearity='relu')
         
     def forward(self, x):
-        x = self.pool(F.relu(self.conv1(x)))  # Conv1 -> ReLU -> Pool
-        x = self.pool(F.relu(self.conv2(x)))  # Conv2 -> ReLU -> Pool
-        x = x.view(x.size(0), -1)             # Flatten feature maps
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = x.view(x.size(0), -1)
         x = F.relu(self.fc1(x))
         if self.use_dropout:
             x = self.dropout(x)
@@ -123,15 +101,11 @@ class LeNet5(nn.Module):
         return x
 
 def modify_final_layer(model, new_num_classes):
-    """Replace the final fully connected layer with a new one for a different number of classes."""
     in_features = model.fc3.in_features
     model.fc3 = nn.Linear(in_features, new_num_classes)
     nn.init.kaiming_uniform_(model.fc3.weight, nonlinearity='relu')
     return model
 
-# ----------------------
-# Training and Evaluation Functions
-# ----------------------
 def train_epoch(model, loader, criterion, optimizer, device):
     model.train()
     running_loss = 0.0
@@ -181,7 +155,6 @@ def train_and_validate(model, train_loader, val_loader, criterion, optimizer, ep
     return history
 
 def evaluate_model(model, loader, device):
-    """Evaluate model on given loader and return accuracy, predictions and true labels."""
     model.eval()
     all_preds = []
     all_labels = []
@@ -232,11 +205,8 @@ def plot_loss_curves(history_baseline, history_variant1, history_variant2):
     # Show the plot
     plt.show()
 
-# ----------------------
-# Main Experiment Routine
-# ----------------------
+# Main Experiment Part
 def main():
-    # Hyperparameters and device settings
     epochs = 10
     batch_size = 32
     initial_lr = 0.001
@@ -246,13 +216,9 @@ def main():
     print("==== Loading CIFAR-10 Data ====")
     cifar10_train, cifar10_val, cifar10_test = load_cifar10(batch_size=batch_size, split_ratio=0.8)
     
-    # ----------------------
-    # Train three CIFAR-10 Models
-    # ----------------------
     print("\n==== Training CIFAR-10 Models ====")
     criterion = nn.CrossEntropyLoss()
     
-    # Baseline LeNet-5 (using Average Pooling)
     model_baseline = LeNet5(num_classes=10, pooling_type='avg', dropout=False).to(device)
     optimizer_baseline = optim.Adam(model_baseline.parameters(), lr=initial_lr)
     print("\nTraining Baseline LeNet-5 (AvgPool)...")
@@ -260,7 +226,7 @@ def main():
                                           criterion, optimizer_baseline, epochs, device)
     torch.save(model_baseline.state_dict(), "saved_models/cifar10_baseline.pth")
     
-    # Variant 1: Add dropout after fc1 (still AvgPool)
+    # Variant 1
     model_variant1 = LeNet5(num_classes=10, pooling_type='avg', dropout=True).to(device)
     optimizer_variant1 = optim.Adam(model_variant1.parameters(), lr=initial_lr)
     print("\nTraining Variant 1 (with Dropout)...")
@@ -268,7 +234,7 @@ def main():
                                           criterion, optimizer_variant1, epochs, device)
     torch.save(model_variant1.state_dict(), "saved_models/cifar10_variant1.pth")
     
-    # Variant 2: Replace AvgPool with MaxPool
+    # Variant 2
     model_variant2 = LeNet5(num_classes=10, pooling_type='max', dropout=False).to(device)
     optimizer_variant2 = optim.Adam(model_variant2.parameters(), lr=initial_lr)
     print("\nTraining Variant 2 (MaxPool instead of AvgPool)...")
@@ -276,9 +242,6 @@ def main():
                                           criterion, optimizer_variant2, epochs, device)
     torch.save(model_variant2.state_dict(), "saved_models/cifar10_variant2.pth")
     
-    # ----------------------
-    # Performance Summary for CIFAR-10 Models
-    # ----------------------
     summary = []
     for name, hist in zip(["Baseline", "Variant1 (Dropout)", "Variant2 (MaxPool)"],
                            [history_baseline, history_variant1, history_variant2]):
@@ -293,7 +256,6 @@ def main():
     print("\n==== CIFAR-10 Models Performance Summary ====")
     print(df_summary)
     
-    # Decide on best model based on final validation accuracy
     final_accs = [history_baseline["val_acc"][-1], history_variant1["val_acc"][-1], history_variant2["val_acc"][-1]]
     best_idx = final_accs.index(max(final_accs))
     best_model_name = ["Baseline", "Variant1 (Dropout)", "Variant2 (MaxPool)"][best_idx]
@@ -306,28 +268,21 @@ def main():
     print(f"\nSelected Best CIFAR-10 Model: {best_model_name}")
     torch.save(best_model.state_dict(), "saved_models/best_cifar10_model.pth")
     
-    # ----------------------
-    # Train CIFAR-100 Model Using Best Architecture
-    # ----------------------
+    # Train CIFAR-100 Model
     print("\n==== Training CIFAR-100 Model ====")
     cifar100_train, cifar100_val, cifar100_test = load_cifar100(batch_size=batch_size, split_ratio=0.8)
-    # Instantiate best architecture (assumed Variant2: MaxPool, no dropout) for 20 classes
+
     model_cifar100 = LeNet5(num_classes=20, pooling_type='max', dropout=False).to(device)
     optimizer_cifar100 = optim.Adam(model_cifar100.parameters(), lr=initial_lr)
     history_cifar100 = train_and_validate(model_cifar100, cifar100_train, cifar100_val,
                                          criterion, optimizer_cifar100, epochs, device)
     torch.save(model_cifar100.state_dict(), "saved_models/cifar100_model.pth")
     
-    # ----------------------
-    # Fine-tune Pretrained CIFAR-100 Model on CIFAR-10
-    # ----------------------
     print("\n==== Fine-Tuning CIFAR-10 Pretrained Model ====")
     cifar10_train_ft, cifar10_val_ft, cifar10_test_ft = load_cifar10(batch_size=batch_size, split_ratio=0.8)
-    # Load the pretrained CIFAR-100 model and modify final layer for 10 outputs
     model_finetune = LeNet5(num_classes=20, pooling_type='max', dropout=False).to(device)
     model_finetune.load_state_dict(torch.load("saved_models/cifar100_model.pth"))
     model_finetune = modify_final_layer(model_finetune, new_num_classes=10)
-    # Move the modified model to the device (fix for mismatched device error)
     model_finetune = model_finetune.to(device)
     
     finetune_lr = initial_lr / 2
@@ -337,9 +292,7 @@ def main():
                                           criterion, optimizer_finetune, epochs, device)
     torch.save(model_finetune.state_dict(), "saved_models/cifar10_pretrained.pth")
     
-    # ----------------------
-    # Final Evaluation on CIFAR-10 Test Set
-    # ----------------------
+    # Final Evaluation
     print("\n==== Final Evaluation on CIFAR-10 Test Set ====")
     best_cifar10 = LeNet5(num_classes=10, pooling_type='max' if best_model_name=="Variant2 (MaxPool)" else 'avg',
                           dropout=(True if best_model_name=="Variant1 (Dropout)" else False)).to(device)
@@ -356,18 +309,13 @@ def main():
     
     plot_loss_curves(history_baseline, history_variant1, history_variant2)
     
-    # Compute confusion matrices
     cm_best = confusion_matrix(labels_best, preds_best)
     cm_pretrained = confusion_matrix(labels_pretrained, preds_pretrained)
     classes = cifar10_test.dataset.classes
     
-    # Plot confusion matrices
     plot_confusion_matrix(cm_best, classes, title="Best CIFAR-10 Model Confusion Matrix")
     plot_confusion_matrix(cm_pretrained, classes, title="CIFAR10_pretrained Model Confusion Matrix")
     
-    # ----------------------
-    # Comparison Explanation (printed)
-    # ----------------------
     print("\n==== Comparison and Explanation ====")
     print("1. Training Sets:")
     print("   - The Best CIFAR-10 model was trained solely on CIFAR-10 using a split of training and validation data.")
