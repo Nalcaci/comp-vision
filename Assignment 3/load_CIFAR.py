@@ -14,8 +14,8 @@ trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True
 testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
 
 # Load CIFAR-100 dataset
-trainset = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
-testset = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
+# trainset = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, transform=transform)
+# testset = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, transform=transform)
 
 # Define 80/20 split for training/validation
 train_size = int(0.8 * len(trainset))
