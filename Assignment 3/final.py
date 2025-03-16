@@ -12,6 +12,37 @@ import pandas as pd
 import os
 
 # ----------------------
+# Custom CIFAR-100 Wrapper to Return Coarse Labels
+# ----------------------
+class CIFAR100Coarse(torchvision.datasets.CIFAR100):
+    """
+    A wrapper around torchvision.datasets.CIFAR100 that converts fine labels
+    into coarse labels (20 classes) using a fixed mapping.
+    """
+    def __init__(self, root, train=True, transform=None, target_transform=None, download=False):
+        super().__init__(root=root, train=train, transform=transform, 
+                         target_transform=target_transform, download=download)
+        # Hard-coded mapping from fine labels (0-99) to coarse labels (0-19)
+        self.fine_to_coarse = [
+            4, 1, 14, 8, 0, 6, 7, 7, 18, 3,
+            3, 14, 9, 18, 7, 11, 3, 9, 7, 11,
+            6, 11, 5, 10, 7, 6, 13, 15, 3, 15,
+            0, 11, 1, 10, 12, 16, 12, 1, 9, 15,
+            13, 16, 16, 2, 4, 2, 10, 0, 17, 3,
+            12, 9, 6, 4, 17, 0, 17, 5, 19, 2,
+            5, 19, 2, 0, 1, 1, 4, 6, 3, 16,
+            12, 9, 13, 16, 16, 13, 16, 19, 2, 5,
+            4, 13, 0, 14, 14, 7, 5, 18, 3, 9,
+            18, 2, 13, 14, 5, 7, 18, 4, 18, 19
+        ]
+    
+    def __getitem__(self, index):
+        # Get image and the original fine label from the parent class
+        img, fine_label = super().__getitem__(index)
+        coarse_label = self.fine_to_coarse[fine_label]
+        return img, coarse_label
+
+# ----------------------
 # Data Loading Functions
 # ----------------------
 def load_cifar10(batch_size=32, split_ratio=0.8):
@@ -30,15 +61,13 @@ def load_cifar10(batch_size=32, split_ratio=0.8):
     return train_loader, val_loader, test_loader
 
 def load_cifar100(batch_size=32, split_ratio=0.8):
-    # Note: Using 'target_type="coarse"' returns 20 classes (coarse labels)
     transform = transforms.Compose([
         transforms.ToTensor(),
         transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5))
     ])
-    trainset = torchvision.datasets.CIFAR100(root='./data', train=True, download=True, 
-                                              transform=transform, target_type='coarse')
-    testset  = torchvision.datasets.CIFAR100(root='./data', train=False, download=True, 
-                                              transform=transform, target_type='coarse')
+    # Use the custom wrapper to get coarse labels (20 classes)
+    trainset = CIFAR100Coarse(root='./data', train=True, download=True, transform=transform)
+    testset  = CIFAR100Coarse(root='./data', train=False, download=True, transform=transform)
     train_size = int(split_ratio * len(trainset))
     val_size   = len(trainset) - train_size
     train_subset, val_subset = random_split(trainset, [train_size, val_size])
@@ -60,9 +89,7 @@ class LeNet5(nn.Module):
     def __init__(self, num_classes=10, pooling_type='avg', dropout=False):
         super(LeNet5, self).__init__()
         self.conv1 = nn.Conv2d(in_channels=3, out_channels=6, kernel_size=5)  # 32x32 -> 28x28
-        self.conv2 = nn.Conv2d(in_channels=6, out_channels=16, kernel_size=5) # 28x28 -> 24x24 then pooling -> 12x12 then conv: 12-4=8 then pooling -> 4x4? 
-        # However, following original LeNet-5 calculations for CIFAR-10 (32x32 input):
-        # conv1: 32-5+1 = 28; pool: 28/2 = 14; conv2: 14-5+1 = 10; pool: 10/2 = 5.
+        self.conv2 = nn.Conv2d(in_channels=6, out_channels=16, kernel_size=5) # 28x28 -> 10x10 after pooling
         if pooling_type == 'avg':
             self.pool = nn.AvgPool2d(kernel_size=2, stride=2)
         elif pooling_type == 'max':
@@ -241,7 +268,6 @@ def main():
     print(df_summary)
     
     # Decide on best model based on final validation accuracy
-    # (Here we choose the one with highest validation accuracy)
     final_accs = [history_baseline["val_acc"][-1], history_variant1["val_acc"][-1], history_variant2["val_acc"][-1]]
     best_idx = final_accs.index(max(final_accs))
     best_model_name = ["Baseline", "Variant1 (Dropout)", "Variant2 (MaxPool)"][best_idx]
@@ -252,18 +278,14 @@ def main():
     else:
         best_model = model_variant2
     print(f"\nSelected Best CIFAR-10 Model: {best_model_name}")
-    
-    # Save the best CIFAR-10 model for later evaluation
     torch.save(best_model.state_dict(), "saved_models/best_cifar10_model.pth")
     
     # ----------------------
     # Train CIFAR-100 Model Using Best Architecture
     # ----------------------
     print("\n==== Training CIFAR-100 Model ====")
-    # Load CIFAR-100 data (using 20 coarse labels)
     cifar100_train, cifar100_val, cifar100_test = load_cifar100(batch_size=batch_size, split_ratio=0.8)
-    # Instantiate best model architecture but change final layer to output 20 classes
-    # (Assuming best architecture is variant2, i.e., using MaxPool and no dropout)
+    # Instantiate best architecture (assumed Variant2: MaxPool, no dropout) for 20 classes
     model_cifar100 = LeNet5(num_classes=20, pooling_type='max', dropout=False).to(device)
     optimizer_cifar100 = optim.Adam(model_cifar100.parameters(), lr=initial_lr)
     history_cifar100 = train_and_validate(model_cifar100, cifar100_train, cifar100_val,
@@ -274,14 +296,14 @@ def main():
     # Fine-tune Pretrained CIFAR-100 Model on CIFAR-10
     # ----------------------
     print("\n==== Fine-Tuning CIFAR-10 Pretrained Model ====")
-    # Load CIFAR-10 training data again for fine-tuning
     cifar10_train_ft, cifar10_val_ft, cifar10_test_ft = load_cifar10(batch_size=batch_size, split_ratio=0.8)
     # Load the pretrained CIFAR-100 model and modify final layer for 10 outputs
     model_finetune = LeNet5(num_classes=20, pooling_type='max', dropout=False).to(device)
     model_finetune.load_state_dict(torch.load("saved_models/cifar100_model.pth"))
     model_finetune = modify_final_layer(model_finetune, new_num_classes=10)
+    # Move the modified model to the device (fix for mismatched device error)
+    model_finetune = model_finetune.to(device)
     
-    # Use a learning rate that is half of the initial learning rate for fine-tuning
     finetune_lr = initial_lr / 2
     optimizer_finetune = optim.Adam(model_finetune.parameters(), lr=finetune_lr)
     print(f"Fine-tuning with learning rate: {finetune_lr}")
@@ -293,7 +315,6 @@ def main():
     # Final Evaluation on CIFAR-10 Test Set
     # ----------------------
     print("\n==== Final Evaluation on CIFAR-10 Test Set ====")
-    # Load best CIFAR-10 model and fine-tuned model
     best_cifar10 = LeNet5(num_classes=10, pooling_type='max' if best_model_name=="Variant2 (MaxPool)" else 'avg',
                           dropout=(True if best_model_name=="Variant1 (Dropout)" else False)).to(device)
     best_cifar10.load_state_dict(torch.load("saved_models/best_cifar10_model.pth"))
@@ -322,14 +343,14 @@ def main():
     print("\n==== Comparison and Explanation ====")
     print("1. Training Sets:")
     print("   - The Best CIFAR-10 model was trained solely on CIFAR-10 using a split of training and validation data.")
-    print("   - The CIFAR10_pretrained model was first trained on CIFAR-100 (using 20 coarse labels) and then fine-tuned on CIFAR-10.")
+    print("   - The CIFAR10_pretrained model was first trained on CIFAR-100 (with 20 coarse labels) and then fine-tuned on CIFAR-10.")
     print("2. Validation Sets:")
-    print("   - Both models used a portion of the CIFAR-10 training data as validation sets for early stopping and hyperparameter tuning.")
+    print("   - Both models used a portion of the CIFAR-10 training data as validation sets for hyperparameter tuning.")
     print("3. Test Sets:")
-    print("   - The CIFAR-10 test set was held out from training and validation, providing an unbiased evaluation of model generalization.")
+    print("   - The CIFAR-10 test set was held out during training and validation, providing an unbiased evaluation of generalization.")
     print("4. Performance Differences:")
     print("   - The best model (trained directly on CIFAR-10) may capture class-specific features more directly.")
-    print("   - The fine-tuned model benefits from pretraining on CIFAR-100, which may help generalize but might also show slight differences in feature representations.")
+    print("   - The fine-tuned model benefits from pretraining on CIFAR-100, which may lead to differences in learned features.")
 
 if __name__ == '__main__':
     main()
