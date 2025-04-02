@@ -192,27 +192,21 @@ class YOLOLoss(nn.Module):
         self.lambda_noobj = lambda_noobj
 
     def forward(self, predictions, target, return_components=False):
-        # Reshape predictions and target to [batch, 7, 7, 5+C]
         predictions = predictions.view(-1, self.S, self.S, 5 + self.C)
         target = target.view(-1, self.S, self.S, 5 + self.C)
         
-        # Create object and no-object masks
         obj_mask = target[..., 4] > 0.5
         noobj_mask = ~obj_mask
 
-        # Coordinate loss for x and y
         coord_loss = self.lambda_coord * ((predictions[..., 0:2][obj_mask] - target[..., 0:2][obj_mask]) ** 2).sum()
 
-        # Width and height loss (apply sqrt)
         pred_wh = torch.sqrt(predictions[..., 2:4][obj_mask] + 1e-6)
         target_wh = torch.sqrt(target[..., 2:4][obj_mask] + 1e-6)
         wh_loss = self.lambda_coord * ((pred_wh - target_wh) ** 2).sum()
 
-        # Confidence loss
         conf_loss_obj = ((predictions[..., 4][obj_mask] - target[..., 4][obj_mask]) ** 2).sum()
         conf_loss_noobj = self.lambda_noobj * ((predictions[..., 4][noobj_mask] - target[..., 4][noobj_mask]) ** 2).sum()
 
-        # Classification loss (only for cells with objects)
         class_loss = ((predictions[..., 5:][obj_mask] - target[..., 5:][obj_mask]) ** 2).sum()
 
         total_loss = coord_loss + wh_loss + conf_loss_obj + conf_loss_noobj + class_loss
@@ -228,16 +222,12 @@ class YOLOLoss(nn.Module):
         else:
             return total_loss
 
-# ---------------------
-# Training loop
-# ---------------------
 def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, device):
     best_val_loss = float('inf')
     patience = 10
     counter = 0
     best_model_wts = None
 
-    # History dictionaries for plotting
     history = {
         'train_total_loss': [],
         'train_coord_loss': [],
@@ -280,7 +270,6 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         epoch_conf_noobj_loss = running_conf_noobj_loss / len(train_loader.dataset)
         epoch_class_loss = running_class_loss / len(train_loader.dataset)
 
-        # Validation
         model.eval()
         running_val_loss = 0.0
         with torch.no_grad():
@@ -303,7 +292,6 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
               f"Conf Obj {epoch_conf_obj_loss:.4f}, Conf NoObj {epoch_conf_noobj_loss:.4f}, Class {epoch_class_loss:.4f}), "
               f"Val Loss = {epoch_val_loss:.4f}")
 
-        # Early stopping check
         if epoch_val_loss < best_val_loss:
             best_val_loss = epoch_val_loss
             counter = 0
@@ -318,9 +306,6 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         model.load_state_dict(best_model_wts)
     return model, history
 
-# ---------------------
-# Evaluation functions
-# ---------------------
 def compute_average_precision(all_detections, all_ground_truths, class_idx, iou_threshold=0.5):
     scores = []
     tp = []
@@ -425,9 +410,6 @@ def compute_confusion_matrix(model, dataloader, threshold, device):
     cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
     return cm
 
-# ---------------------
-# Visualization helper
-# ---------------------
 def visualize_samples(dataset, num_samples=5):
     indices = random.sample(range(len(dataset)), num_samples)
     for idx in indices:
@@ -448,9 +430,6 @@ def visualize_samples(dataset, num_samples=5):
                     ax.text(box[0], box[1], label_str, color='yellow', fontsize=12)
         plt.show()
 
-# ---------------------
-# Main function
-# ---------------------
 def main():
     random.seed(42)
     np.random.seed(42)
@@ -459,41 +438,31 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device:", device)
 
-    # Load annotations from XML files
     annotations_folder = "data/annotations"
     df = load_annotations(annotations_folder)
     print(f"Loaded {len(df)} annotations.")
 
-    # Stratified split on label
     train_df, val_df = train_test_split(df, test_size=0.2, stratify=df['label'], random_state=42)
 
-    # Folder containing images
     images_folder = "data/Images"
 
-    # Create datasets
     train_dataset = DogCatDataset(train_df, images_folder)
     val_dataset = DogCatDataset(val_df, images_folder)
 
-    # Visualize a few samples to verify resizing and bbox transformation
     visualize_samples(train_dataset, num_samples=5)
 
-    # Create DataLoaders
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=4)
 
-    # Initialize model, loss, optimizer
     model = YOLOv1().to(device)
     criterion = YOLOLoss()
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-    # Train the model and record loss history
     model, history = train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs=50, device=device)
 
-    # Save the best model weights
     torch.save(model.state_dict(), "best_model_weights.pth")
     print("Best model weights saved to best_model_weights.pth")
 
-    # Plot Training and Validation Total Loss over epochs
     epochs = range(1, len(history['train_total_loss']) + 1)
     plt.figure()
     plt.plot(epochs, history['train_total_loss'], label='Train Total Loss')
@@ -504,7 +473,6 @@ def main():
     plt.legend()
     plt.show()
 
-    # Plot individual training loss components
     plt.figure()
     plt.plot(epochs, history['train_coord_loss'], label='Coord Loss')
     plt.plot(epochs, history['train_wh_loss'], label='WH Loss')
@@ -517,7 +485,6 @@ def main():
     plt.legend()
     plt.show()
 
-    # Evaluate model over a range of thresholds (validation set)
     thresholds = np.linspace(0, 1, 21)
     mAPs = []
     for thr in thresholds:
@@ -528,12 +495,10 @@ def main():
     best_thr = thresholds[np.argmax(mAPs)]
     print(f"Best threshold based on mAP: {best_thr:.2f}")
 
-    # Compute and display confusion matrix for best threshold
     cm = compute_confusion_matrix(model, val_loader, threshold=best_thr, device=device)
     print("Confusion Matrix (rows: true, cols: predicted [cat, dog]):")
     print(cm)
 
-    # Plot mAP vs threshold
     plt.figure()
     plt.plot(thresholds, mAPs, marker='o')
     plt.xlabel("Objectness Threshold")
