@@ -15,9 +15,6 @@ from torchvision import transforms
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
 
-# ---------------------
-# Annotation Parsing
-# ---------------------
 def parse_annotation(xml_file):
     """
     Parse a single XML file and return a dictionary with:
@@ -27,24 +24,20 @@ def parse_annotation(xml_file):
     tree = ET.parse(xml_file)
     root = tree.getroot()
     
-    # Get image filename
     filename = root.find('filename').text
 
-    # Get the first object annotation (assumes one object per image)
     obj = root.find('object')
     if obj is None:
         return None
 
-    # Get label (assumes label is "cat" or "dog")
     label_str = obj.find('name').text.lower()
     if label_str == 'cat':
         label = 0
     elif label_str == 'dog':
         label = 1
     else:
-        return None  # Skip if label is not cat or dog
+        return None
 
-    # Get bounding box (assumes VOC format: xmin, ymin, xmax, ymax)
     bndbox = obj.find('bndbox')
     xmin = float(bndbox.find('xmin').text)
     ymin = float(bndbox.find('ymin').text)
@@ -56,12 +49,7 @@ def parse_annotation(xml_file):
     return {"filename": filename, "label": label, "x": xmin, "y": ymin, "w": w, "h": h}
 
 def load_annotations(annotations_folder):
-    """
-    Parse all XML files in the annotations folder (including subfolders) and return a DataFrame.
-    Searches recursively for files with extension .xml or .XML.
-    """
     data = []
-    # Recursively search for XML files in the folder.
     xml_files = glob.glob(os.path.join(annotations_folder, '**', '*.xml'), recursive=True)
     xml_files += glob.glob(os.path.join(annotations_folder, '**', '*.XML'), recursive=True)
     print(f"Found {len(xml_files)} XML files in {annotations_folder}")
@@ -72,22 +60,13 @@ def load_annotations(annotations_folder):
             data.append(annotation)
     return pd.DataFrame(data)
 
-# ---------------------
-# Utility functions
-# ---------------------
 def cell_to_bbox(cell_row, cell_col, pred):
-    """
-    Convert a cell’s prediction (x, y, w, h) into an absolute bounding box.
-    x and y are offsets within the cell (0-1), and w, h are normalized by the full image size.
-    """
-    cell_size = 112 / 7  # each cell covers ~16 pixels
+    cell_size = 112 / 7 
     x_cell, y_cell, w, h = pred
-    # Compute the absolute center coordinates
     center_x = (cell_col + x_cell) * cell_size
     center_y = (cell_row + y_cell) * cell_size
     box_w = w * 112
     box_h = h * 112
-    # Convert center coordinates to corner coordinates
     x1 = center_x - box_w / 2
     y1 = center_y - box_h / 2
     x2 = center_x + box_w / 2
@@ -95,7 +74,6 @@ def cell_to_bbox(cell_row, cell_col, pred):
     return [x1, y1, x2, y2]
 
 def compute_iou(box1, box2):
-    """Compute Intersection over Union (IoU) between two boxes [x1,y1,x2,y2]."""
     x1 = max(box1[0], box2[0])
     y1 = max(box1[1], box2[1])
     x2 = min(box1[2], box2[2])
@@ -108,19 +86,11 @@ def compute_iou(box1, box2):
         return 0
     return inter_area / union_area
 
-# ---------------------
-# Dataset definition
-# ---------------------
 class DogCatDataset(Dataset):
-    """
-    A PyTorch Dataset for the dog-cat head detection dataset.
-    Uses a dataframe with columns: filename, label, x, y, w, h.
-    """
     def __init__(self, df, images_folder, transform=None):
         self.df = df.reset_index(drop=True)
         self.images_folder = images_folder
         self.transform = transform
-        # Always resize images to 112x112.
         self.resize = transforms.Resize((112, 112))
         self.to_tensor = transforms.ToTensor()
 
@@ -133,10 +103,8 @@ class DogCatDataset(Dataset):
         image = Image.open(img_path).convert("RGB")
         orig_w, orig_h = image.size
 
-        # Bounding box in pixel coordinates from XML: x, y, w, h (x,y = top-left)
         bbox = np.array([row["x"], row["y"], row["w"], row["h"]], dtype=np.float32)
 
-        # Resize image and adjust bbox accordingly
         image = self.resize(image)
         new_w, new_h = 112, 112
         scale_w = new_w / orig_w
@@ -148,36 +116,27 @@ class DogCatDataset(Dataset):
 
         image = self.to_tensor(image)
 
-        # Prepare target tensor in YOLO format.
-        # Shape: (7, 7, 7) where last dim: [x, y, w, h, objectness, class0, class1]
         target = np.zeros((7, 7, 7), dtype=np.float32)
-        # Compute normalized center of the bounding box
         center_x = (bbox[0] + bbox[2] / 2) / 112  
         center_y = (bbox[1] + bbox[3] / 2) / 112  
         cell_col = int(center_x * 7)
         cell_row = int(center_y * 7)
-        # Compute offsets relative to the cell
         x_cell = center_x * 7 - cell_col
         y_cell = center_y * 7 - cell_row
         norm_w = bbox[2] / 112
         norm_h = bbox[3] / 112
         target[cell_row, cell_col, 0:4] = [x_cell, y_cell, norm_w, norm_h]
-        target[cell_row, cell_col, 4] = 1  # objectness
+        target[cell_row, cell_col, 4] = 1
         
-        # One-hot encoding for class; label: 0=cat, 1=dog.
         label = int(row["label"])
         if label == 0:
             target[cell_row, cell_col, 5] = 1
         else:
             target[cell_row, cell_col, 6] = 1
 
-        # Flatten target to shape (343,)
         target = torch.from_numpy(target.flatten())
         return image, target
 
-# ---------------------
-# Model definition
-# ---------------------
 class YOLOv1(nn.Module):
     def __init__(self):
         super(YOLOv1, self).__init__()
@@ -208,7 +167,7 @@ class YOLOv1(nn.Module):
         )
         self.dropout = nn.Dropout(0.5)
         self.fc1 = nn.Linear(7 * 7 * 32, 512)
-        self.fc2 = nn.Linear(512, 343)  # 7x7 grid * 7 values per cell
+        self.fc2 = nn.Linear(512, 343)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
@@ -221,9 +180,6 @@ class YOLOv1(nn.Module):
         x = self.sigmoid(x)
         return x
 
-# ---------------------
-# Loss definition
-# ---------------------
 class YOLOLoss(nn.Module):
     def __init__(self, S=7, B=1, C=2, lambda_coord=5, lambda_noobj=0.5):
         super(YOLOLoss, self).__init__()
@@ -234,37 +190,28 @@ class YOLOLoss(nn.Module):
         self.lambda_noobj = lambda_noobj
 
     def forward(self, predictions, target):
-        # Reshape predictions and target to [batch, 7, 7, 5+C]
         predictions = predictions.view(-1, self.S, self.S, 5 + self.C)
         target = target.view(-1, self.S, self.S, 5 + self.C)
         
-        # Create object and no-object masks
         obj_mask = target[..., 4] > 0.5
         noobj_mask = ~obj_mask
 
-        # Coordinate loss for x and y (apply mask after slicing the last dim)
         coord_loss = self.lambda_coord * (
             (predictions[..., 0:2][obj_mask] - target[..., 0:2][obj_mask]) ** 2
         ).sum()
 
-        # Width and height loss (apply sqrt to lessen the impact of large values)
         pred_wh = torch.sqrt(predictions[..., 2:4][obj_mask] + 1e-6)
         target_wh = torch.sqrt(target[..., 2:4][obj_mask] + 1e-6)
         wh_loss = self.lambda_coord * ((pred_wh - target_wh) ** 2).sum()
 
-        # Confidence loss
         conf_loss_obj = ((predictions[..., 4][obj_mask] - target[..., 4][obj_mask]) ** 2).sum()
         conf_loss_noobj = self.lambda_noobj * ((predictions[..., 4][noobj_mask] - target[..., 4][noobj_mask]) ** 2).sum()
 
-        # Classification loss (only for cells with objects)
         class_loss = ((predictions[..., 5:][obj_mask] - target[..., 5:][obj_mask]) ** 2).sum()
 
         total_loss = coord_loss + wh_loss + conf_loss_obj + conf_loss_noobj + class_loss
         return total_loss
 
-# ---------------------
-# Training loop
-# ---------------------
 def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, device):
     best_val_loss = float('inf')
     patience = 10
@@ -309,9 +256,6 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         model.load_state_dict(best_model_wts)
     return model
 
-# ---------------------
-# Evaluation functions
-# ---------------------
 def compute_average_precision(all_detections, all_ground_truths, class_idx, iou_threshold=0.5):
     scores = []
     tp = []
@@ -416,9 +360,6 @@ def compute_confusion_matrix(model, dataloader, threshold, device):
     cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
     return cm
 
-# ---------------------
-# Visualization helper
-# ---------------------
 def visualize_samples(dataset, num_samples=5):
     indices = random.sample(range(len(dataset)), num_samples)
     for idx in indices:
@@ -439,9 +380,6 @@ def visualize_samples(dataset, num_samples=5):
                     ax.text(box[0], box[1], label_str, color='yellow', fontsize=12)
         plt.show()
 
-# ---------------------
-# Main function
-# ---------------------
 def main():
     random.seed(42)
     np.random.seed(42)
@@ -450,37 +388,28 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device:", device)
 
-    # Load annotations from XML files
     annotations_folder = "data/annotations"
     df = load_annotations(annotations_folder)
     print(f"Loaded {len(df)} annotations.")
 
-    # Stratified split on label
     train_df, val_df = train_test_split(df, test_size=0.2, stratify=df['label'], random_state=42)
 
-    # Folder containing images
     images_folder = "data/Images"
 
-    # Create datasets
     train_dataset = DogCatDataset(train_df, images_folder)
     val_dataset = DogCatDataset(val_df, images_folder)
 
-    # Visualize a few samples to verify resizing and bbox transformation
     visualize_samples(train_dataset, num_samples=5)
 
-    # Create DataLoaders
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=4)
 
-    # Initialize model, loss, optimizer
     model = YOLOv1().to(device)
     criterion = YOLOLoss()
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
-    # Train the model
     model = train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs=50, device=device)
 
-    # Evaluate model over a range of thresholds
     thresholds = np.linspace(0, 1, 21)
     mAPs = []
     for thr in thresholds:
@@ -491,12 +420,10 @@ def main():
     best_thr = thresholds[np.argmax(mAPs)]
     print(f"Best threshold based on mAP: {best_thr:.2f}")
 
-    # Compute and display confusion matrix
     cm = compute_confusion_matrix(model, val_loader, threshold=best_thr, device=device)
     print("Confusion Matrix (rows: true, cols: predicted [cat, dog]):")
     print(cm)
 
-    # Plot mAP vs threshold
     plt.figure()
     plt.plot(thresholds, mAPs, marker='o')
     plt.xlabel("Objectness Threshold")
