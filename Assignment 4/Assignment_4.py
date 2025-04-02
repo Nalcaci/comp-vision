@@ -15,9 +15,6 @@ from torchvision import transforms
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
 
-# ---------------------
-# Annotation Parsing
-# ---------------------
 def parse_annotation(xml_file):
     """
     Parse a single XML file and return a dictionary with:
@@ -27,24 +24,20 @@ def parse_annotation(xml_file):
     tree = ET.parse(xml_file)
     root = tree.getroot()
     
-    # Get image filename
     filename = root.find('filename').text
 
-    # Get the first object annotation (assumes one object per image)
     obj = root.find('object')
     if obj is None:
         return None
 
-    # Get label (assumes label is "cat" or "dog")
     label_str = obj.find('name').text.lower()
     if label_str == 'cat':
         label = 0
     elif label_str == 'dog':
         label = 1
     else:
-        return None  # Skip if label is not cat or dog
+        return None
 
-    # Get bounding box (assumes VOC format: xmin, ymin, xmax, ymax)
     bndbox = obj.find('bndbox')
     xmin = float(bndbox.find('xmin').text)
     ymin = float(bndbox.find('ymin').text)
@@ -56,10 +49,6 @@ def parse_annotation(xml_file):
     return {"filename": filename, "label": label, "x": xmin, "y": ymin, "w": w, "h": h}
 
 def load_annotations(annotations_folder):
-    """
-    Parse all XML files in the annotations folder (including subfolders) and return a DataFrame.
-    Searches recursively for files with extension .xml or .XML.
-    """
     data = []
     xml_files = glob.glob(os.path.join(annotations_folder, '**', '*.xml'), recursive=True)
     xml_files += glob.glob(os.path.join(annotations_folder, '**', '*.XML'), recursive=True)
@@ -71,14 +60,8 @@ def load_annotations(annotations_folder):
             data.append(annotation)
     return pd.DataFrame(data)
 
-# ---------------------
-# Utility functions
-# ---------------------
+
 def cell_to_bbox(cell_row, cell_col, pred):
-    """
-    Convert a cell’s prediction (x, y, w, h) into an absolute bounding box.
-    x and y are offsets within the cell (0-1), and w, h are normalized by the full image size.
-    """
     cell_size = 112 / 7  # each cell covers ~16 pixels
     x_cell, y_cell, w, h = pred
     center_x = (cell_col + x_cell) * cell_size
@@ -92,7 +75,6 @@ def cell_to_bbox(cell_row, cell_col, pred):
     return [x1, y1, x2, y2]
 
 def compute_iou(box1, box2):
-    """Compute Intersection over Union (IoU) between two boxes [x1,y1,x2,y2]."""
     x1 = max(box1[0], box2[0])
     y1 = max(box1[1], box2[1])
     x2 = min(box1[2], box2[2])
@@ -105,14 +87,7 @@ def compute_iou(box1, box2):
         return 0
     return inter_area / union_area
 
-# ---------------------
-# Dataset definition
-# ---------------------
 class DogCatDataset(Dataset):
-    """
-    A PyTorch Dataset for the dog-cat head detection dataset.
-    Uses a dataframe with columns: filename, label, x, y, w, h.
-    """
     def __init__(self, df, images_folder, transform=None):
         self.df = df.reset_index(drop=True)
         self.images_folder = images_folder
@@ -129,10 +104,8 @@ class DogCatDataset(Dataset):
         image = Image.open(img_path).convert("RGB")
         orig_w, orig_h = image.size
 
-        # Bounding box in pixel coordinates: x, y, w, h (top-left corner)
         bbox = np.array([row["x"], row["y"], row["w"], row["h"]], dtype=np.float32)
 
-        # Resize image and adjust bbox accordingly
         image = self.resize(image)
         new_w, new_h = 112, 112
         scale_w = new_w / orig_w
@@ -144,8 +117,6 @@ class DogCatDataset(Dataset):
 
         image = self.to_tensor(image)
 
-        # Prepare target tensor in YOLO format.
-        # Shape: (7, 7, 7) where last dim: [x, y, w, h, objectness, class0, class1]
         target = np.zeros((7, 7, 7), dtype=np.float32)
         center_x = (bbox[0] + bbox[2] / 2) / 112  
         center_y = (bbox[1] + bbox[3] / 2) / 112  
@@ -156,22 +127,17 @@ class DogCatDataset(Dataset):
         norm_w = bbox[2] / 112
         norm_h = bbox[3] / 112
         target[cell_row, cell_col, 0:4] = [x_cell, y_cell, norm_w, norm_h]
-        target[cell_row, cell_col, 4] = 1  # objectness
+        target[cell_row, cell_col, 4] = 1
 
-        # One-hot encoding for class; label: 0=cat, 1=dog.
         label = int(row["label"])
         if label == 0:
             target[cell_row, cell_col, 5] = 1
         else:
             target[cell_row, cell_col, 6] = 1
 
-        # Flatten target to shape (343,)
         target = torch.from_numpy(target.flatten())
         return image, target
 
-# ---------------------
-# Model definition
-# ---------------------
 class YOLOv1(nn.Module):
     def __init__(self):
         super(YOLOv1, self).__init__()
@@ -202,7 +168,7 @@ class YOLOv1(nn.Module):
         )
         self.dropout = nn.Dropout(0.5)
         self.fc1 = nn.Linear(7 * 7 * 32, 512)
-        self.fc2 = nn.Linear(512, 343)  # 7x7 grid * 7 values per cell
+        self.fc2 = nn.Linear(512, 343)
         self.sigmoid = nn.Sigmoid()
         self.relu = nn.ReLU()
 
@@ -216,9 +182,6 @@ class YOLOv1(nn.Module):
         x = self.sigmoid(x)
         return x
 
-# ---------------------
-# Loss definition
-# ---------------------
 class YOLOLoss(nn.Module):
     def __init__(self, S=7, B=1, C=2, lambda_coord=5, lambda_noobj=0.5):
         super(YOLOLoss, self).__init__()
